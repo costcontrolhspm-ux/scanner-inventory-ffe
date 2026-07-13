@@ -1,607 +1,292 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Asset Scanner — FFE Inventory</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan Barcode - Inventory</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f2740;
+      color: #fff;
+      margin: 0;
+      padding: 18px 14px 28px;
+      text-align: center;
+      min-height: 100vh;
+    }
+    h3 { margin: 4px 0 14px; font-size: 17px; }
 
-  :root{
-    --bg:#151b23;
-    --panel:#1e2630;
-    --panel-2:#242e3a;
-    --line:#313e4d;
-    --amber:#e8a23c;
-    --amber-dim:#8a6427;
-    --ok:#5aa87a;
-    --ok-dim:#2c4436;
-    --err:#d16456;
-    --err-dim:#4a2d28;
-    --text:#eef1f4;
-    --text-dim:#8b97a5;
-    --text-faint:#5a6674;
-    --radius:14px;
-  }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;}
-  body{
-    background:
-      radial-gradient(1200px 500px at 50% -10%, rgba(232,162,60,0.06), transparent 60%),
-      var(--bg);
-    color:var(--text);
-    font-family:'Inter', system-ui, sans-serif;
-    min-height:100vh;
-    padding:0 0 40px;
-  }
+    /* ---- Toggle 2 mode ---- */
+    #modeToggle {
+      display: flex;
+      max-width: 420px;
+      margin: 0 auto 14px;
+      background: #16324f;
+      border-radius: 10px;
+      padding: 4px;
+      gap: 4px;
+    }
+    #modeToggle button {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: #9fb3c8;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    #modeToggle button.active {
+      background: #1d4ed8;
+      color: #fff;
+    }
+    #modeToggle button.active.view-active {
+      background: #0e7490;
+    }
 
-  /* ---------- top status bar ---------- */
-  .statusbar{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:10px 18px;
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px;
-    letter-spacing:.04em;
-    color:var(--text-faint);
-    border-bottom:1px solid var(--line);
-  }
-  .statusbar .dot-row{display:flex; align-items:center; gap:7px;}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--text-faint);}
-  .dot.on{background:var(--ok); box-shadow:0 0 8px rgba(90,168,122,.7);}
-  .dot.off{background:var(--err); box-shadow:0 0 8px rgba(209,100,86,.6);}
-  .gear-btn{
-    background:none;border:none;color:var(--text-dim);
-    font-size:16px; cursor:pointer; padding:4px 6px; line-height:1;
-  }
+    #reader {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 2px solid #1d4ed8;
+      transition: border-color 0.15s;
+    }
+    #reader.view-mode { border-color: #0e7490; }
 
-  /* ---------- header / masthead ---------- */
-  .masthead{
-    padding:22px 20px 14px;
-    text-align:center;
-  }
-  .eyebrow{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:10.5px;
-    letter-spacing:.22em;
-    color:var(--amber);
-    text-transform:uppercase;
-    margin:0 0 6px;
-  }
-  .masthead h1{
-    font-family:'Barlow Condensed', sans-serif;
-    font-weight:700;
-    font-size:32px;
-    letter-spacing:.01em;
-    text-transform:uppercase;
-    margin:0;
-    color:var(--text);
-  }
-  .masthead p{
-    margin:6px 0 0;
-    font-size:12.5px;
-    color:var(--text-dim);
-  }
+    #result {
+      margin: 16px auto 0;
+      max-width: 420px;
+      padding: 14px;
+      border-radius: 10px;
+      background: #16324f;
+      min-height: 54px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .ok { color: #4ade80; font-weight: 600; }
+    .warn { color: #fbbf24; font-weight: 600; }
+    .err { color: #f87171; font-weight: 600; }
 
-  .wrap{max-width:440px;margin:0 auto;padding:0 16px;}
+    /* ---- Kartu Asset (mode "Lihat Kartu Asset") ---- */
+    .kartu {
+      text-align: left;
+      background: #0f2740;
+      border: 1px solid #1d4ed8;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 4px;
+    }
+    .kartu.view { border-color: #0e7490; }
+    .kartu .kartu-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .kartu table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .kartu table td { padding: 3px 0; vertical-align: top; }
+    .kartu table td.label { color: #93a5bb; width: 40%; white-space: nowrap; }
+    .kartu table td.val { color: #e2e8f0; font-weight: 600; }
+    .kartu .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    .badge-ffe1 { background: #1d4ed8; color: #fff; }
+    .badge-ffe2 { background: #7c3aed; color: #fff; }
 
-  /* ---------- viewfinder ---------- */
-  .viewfinder{
-    position:relative;
-    border-radius:var(--radius);
-    overflow:hidden;
-    background:#0c1015;
-    border:1px solid var(--line);
-    aspect-ratio: 1 / 1;
-  }
-  #reader{width:100%;height:100%;}
-  #reader video{object-fit:cover;width:100%!important;height:100%!important;}
-  .corner{
-    position:absolute; width:26px; height:26px;
-    border-color:var(--amber); pointer-events:none; z-index:5;
-    filter:drop-shadow(0 0 4px rgba(232,162,60,.5));
-  }
-  .corner.tl{top:14px;left:14px;border-top:3px solid var(--amber);border-left:3px solid var(--amber);border-radius:6px 0 0 0;}
-  .corner.tr{top:14px;right:14px;border-top:3px solid var(--amber);border-right:3px solid var(--amber);border-radius:0 6px 0 0;}
-  .corner.bl{bottom:14px;left:14px;border-bottom:3px solid var(--amber);border-left:3px solid var(--amber);border-radius:0 0 0 6px;}
-  .corner.br{bottom:14px;right:14px;border-bottom:3px solid var(--amber);border-right:3px solid var(--amber);border-radius:0 0 6px 0;}
-  .scanline{
-    position:absolute; left:14px; right:14px; height:2px;
-    background:linear-gradient(90deg, transparent, var(--amber), transparent);
-    top:14px; z-index:4;
-    animation: sweep 2.4s ease-in-out infinite;
-    box-shadow:0 0 10px rgba(232,162,60,.8);
-  }
-  @keyframes sweep{
-    0%{top:14px; opacity:0;}
-    10%{opacity:1;}
-    50%{top:calc(100% - 16px); opacity:1;}
-    90%{opacity:1;}
-    100%{top:14px; opacity:0;}
-  }
-  .vf-empty{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    color:var(--text-faint); font-size:12px; text-align:center; padding:20px;
-    font-family:'IBM Plex Mono', monospace;
-  }
-
-  /* ---------- result card ---------- */
-  .result{
-    margin-top:14px;
-    border-radius:var(--radius);
-    background:var(--panel);
-    border:1px solid var(--line);
-    padding:16px;
-    min-height:64px;
-    transition:border-color .2s;
-  }
-  .result.ok{border-color:var(--ok-dim); background:linear-gradient(180deg, rgba(90,168,122,0.08), var(--panel) 40%);}
-  .result.warn{border-color:var(--amber-dim); background:linear-gradient(180deg, rgba(232,162,60,0.08), var(--panel) 40%);}
-  .result.err{border-color:var(--err-dim); background:linear-gradient(180deg, rgba(209,100,86,0.08), var(--panel) 40%);}
-  .result-status{
-    display:flex; align-items:center; gap:8px;
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px; letter-spacing:.06em; text-transform:uppercase;
-  }
-  .result-status.ok{color:var(--ok);}
-  .result-status.warn{color:var(--amber);}
-  .result-status.err{color:var(--err);}
-  .result-code{
-    font-family:'Barlow Condensed', sans-serif;
-    font-weight:700; font-size:24px; margin:6px 0 2px; color:var(--text);
-  }
-  .result-meta{font-size:12.5px; color:var(--text-dim); line-height:1.6;}
-  .result-idle{color:var(--text-faint); font-size:12.5px;}
-
-  /* ---------- action row ---------- */
-  .actions{
-    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
-    margin-top:12px;
-  }
-  .actions.wide{grid-template-columns:1fr;}
-  .abtn{
-    background:var(--panel); border:1px solid var(--line); color:var(--text);
-    border-radius:10px; padding:11px 8px; font-size:12px; font-weight:500;
-    display:flex; flex-direction:column; align-items:center; gap:4px;
-    cursor:pointer; font-family:'Inter', sans-serif;
-  }
-  .abtn:active{background:var(--panel-2);}
-  .abtn .ic{font-size:17px;}
-  .abtn.primary{border-color:var(--amber-dim); color:var(--amber);}
-
-  /* ---------- manifest / history ---------- */
-  .manifest-head{
-    display:flex; align-items:baseline; justify-content:space-between;
-    margin:22px 0 8px;
-  }
-  .manifest-head h2{
-    font-family:'Barlow Condensed', sans-serif; font-weight:600; font-size:15px;
-    text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim); margin:0;
-  }
-  .manifest-head span{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-faint);}
-  .ticket{
-    display:flex; align-items:center; gap:10px;
-    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--line);
-    border-radius:8px; padding:10px 12px; margin-bottom:7px;
-    font-size:12.5px;
-  }
-  .ticket.ok{border-left-color:var(--ok);}
-  .ticket.warn{border-left-color:var(--amber);}
-  .ticket.err{border-left-color:var(--err);}
-  .ticket .t-icon{font-size:14px; width:18px; text-align:center; flex-shrink:0;}
-  .ticket .t-body{flex:1; min-width:0;}
-  .ticket .t-code{font-family:'IBM Plex Mono', monospace; color:var(--text); font-weight:500;}
-  .ticket .t-sub{color:var(--text-dim); font-size:11px; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .ticket .t-time{font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--text-faint); flex-shrink:0;}
-  .manifest-empty{color:var(--text-faint); font-size:12px; text-align:center; padding:18px 0; font-family:'IBM Plex Mono', monospace;}
-
-  /* ---------- modal (settings / manual entry) ---------- */
-  .modal-back{
-    position:fixed; inset:0; background:rgba(10,13,17,.72);
-    display:none; align-items:flex-end; justify-content:center; z-index:50;
-    backdrop-filter:blur(2px);
-  }
-  .modal-back.show{display:flex;}
-  .modal{
-    background:var(--panel); border:1px solid var(--line); border-bottom:none;
-    border-radius:18px 18px 0 0; width:100%; max-width:440px;
-    padding:20px 20px 28px; animation:slideup .22s ease;
-  }
-  @keyframes slideup{from{transform:translateY(24px); opacity:0;} to{transform:translateY(0); opacity:1;}}
-  .modal h3{
-    font-family:'Barlow Condensed', sans-serif; font-size:20px; font-weight:700;
-    text-transform:uppercase; letter-spacing:.03em; margin:0 0 4px;
-  }
-  .modal .sub{color:var(--text-dim); font-size:12px; margin:0 0 16px;}
-  .field{margin-bottom:14px;}
-  .field label{
-    display:block; font-size:11px; color:var(--text-dim); margin-bottom:6px;
-    font-family:'IBM Plex Mono', monospace; letter-spacing:.03em;
-  }
-  .field input{
-    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
-    border-radius:9px; padding:12px 12px; font-size:14px; font-family:'IBM Plex Mono', monospace;
-  }
-  .field input:focus{outline:none; border-color:var(--amber);}
-  .modal-actions{display:flex; gap:8px; margin-top:18px;}
-  .btn{
-    flex:1; padding:13px; border-radius:10px; border:none; font-weight:600;
-    font-size:13.5px; cursor:pointer; font-family:'Inter', sans-serif;
-  }
-  .btn.ghost{background:var(--panel-2); color:var(--text-dim); border:1px solid var(--line);}
-  .btn.solid{background:var(--amber); color:#211406;}
-  .test-result{font-size:12px; margin-top:10px; padding:10px; border-radius:8px; display:none; font-family:'IBM Plex Mono', monospace;}
-  .test-result.show{display:block;}
-  .test-result.ok{background:var(--ok-dim); color:#bfe6cd;}
-  .test-result.err{background:var(--err-dim); color:#f3c8c1;}
-
-  .footer-note{
-    text-align:center; color:var(--text-faint); font-size:10.5px; margin-top:26px;
-    font-family:'IBM Plex Mono', monospace; line-height:1.6; padding:0 20px;
-  }
-</style>
+    #history {
+      max-width: 420px;
+      margin: 18px auto 0;
+      text-align: left;
+      font-size: 12.5px;
+      color: #cbd5e1;
+    }
+    #history div { padding: 6px 8px; border-bottom: 1px solid #1e3a5f; }
+    .hint { color: #93a5bb; font-size: 12px; margin-top: 14px; }
+  </style>
 </head>
 <body>
+  <h3>📷 Scan Barcode / QR Asset</h3>
 
-  <div class="statusbar">
-    <div class="dot-row"><span class="dot" id="netDot"></span><span id="netLabel">memeriksa koneksi…</span></div>
-    <button class="gear-btn" id="openSettings" title="Pengaturan">⚙</button>
+  <div id="modeToggle">
+    <button id="btnModeInput" class="active" onclick="setMode('input')">✍️ Input Data</button>
+    <button id="btnModeView" onclick="setMode('view')">📋 Lihat Kartu Asset</button>
   </div>
 
-  <div class="masthead">
-    <p class="eyebrow">FFE 1 · FFE 2 — Inventory Control</p>
-    <h1>Asset Scanner</h1>
-    <p>Arahkan kamera ke barcode / QR pada label asset</p>
-  </div>
+  <div id="reader"></div>
+  <div id="result">Arahkan kamera ke barcode/QR kode asset...</div>
+  <div id="history"></div>
+  <div class="hint" id="hintText">Mode aktif: <b>Input Data</b> - setiap hasil scan otomatis dicatat ke Google Sheet inventory.</div>
 
-  <div class="wrap">
+  <script>
+    // ==========================================================
+    // WAJIB DIISI sebelum di-deploy:
+    // 1. WEBAPP_URL  -> URL deployment Web App Apps Script Anda, akhiran "/exec"
+    //    (Deploy > Manage deployments > salin "Web app" URL)
+    // 2. SECRET_KEY   -> HARUS SAMA PERSIS dengan secret yang diset lewat menu
+    //    Google Sheets "🔑 Set / Ganti Secret Scanner Eksternal"
+    //
+    // CATATAN KEAMANAN: karena halaman ini statis (di-host di GitHub Pages,
+    // tanpa server backend), SECRET_KEY ini pasti terlihat oleh siapa pun yang
+    // membuka "view source" halaman ini. Anggap secret ini sebagai "kunci pintu
+    // gudang", bukan password rahasia mutlak - fungsinya mencegah akses acak/
+    // bot, BUKAN mencegah orang yang memang berniat jahat dan mau capek-capek
+    // membaca source code. Untuk keamanan lebih tinggi, ganti secret ini secara
+    // berkala lewat menu di atas.
+    //
+    // ==========================================================
+    // FITUR 2 MODE:
+    // - "Input Data"        -> perilaku lama (default): hasil scan dicatat ke
+    //   Sheet1 + Log Perubahan di backend (processScan_ / doPost mode=input).
+    // - "Lihat Kartu Asset" -> HANYA menampilkan info asset (kartu) di layar,
+    //   TIDAK menulis apa pun ke sheet (backend memakai lookupAsset_ / doPost
+    //   mode=view). Cocok dipakai untuk cek cepat info asset tanpa mengubah
+    //   data log/riwayat.
+    // Pastikan Code.gs di backend sudah diperbarui (menambahkan lookupAsset_
+    // dan pengecekan "mode" di doPost) supaya toggle ini benar-benar berfungsi.
+    // ==========================================================
+    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzxkckkPqqP941voakxwslX-3RRkn62zAyJY7PB6tozZvYGU6ItXqOlAFUdlwzhs8NO/exec';
+    const SECRET_KEY = 'Malang2026';
 
-    <div class="viewfinder" id="viewfinder">
-      <div id="reader"></div>
-      <div class="vf-empty" id="vfEmpty">Menyiapkan kamera…</div>
-      <div class="scanline" id="scanline" style="display:none;"></div>
-      <div class="corner tl"></div><div class="corner tr"></div>
-      <div class="corner bl"></div><div class="corner br"></div>
-    </div>
+    let busy = false;
+    let currentMode = 'input'; // 'input' | 'view'
+    const historyEl = document.getElementById('history');
+    const resultEl = document.getElementById('result');
+    const readerEl = document.getElementById('reader');
+    const hintEl = document.getElementById('hintText');
+    const btnInput = document.getElementById('btnModeInput');
+    const btnView = document.getElementById('btnModeView');
 
-    <div class="result" id="resultCard">
-      <div class="result-idle" id="resultIdle">Belum ada hasil scan pada sesi ini.</div>
-    </div>
-
-    <div class="actions">
-      <button class="abtn" id="btnManual"><span class="ic">⌨</span>Input Manual</button>
-      <button class="abtn" id="btnTorch"><span class="ic">🔦</span>Senter</button>
-      <button class="abtn" id="btnFlip"><span class="ic">🔄</span>Ganti Kamera</button>
-    </div>
-
-    <div class="manifest-head">
-      <h2>Riwayat Scan Sesi Ini</h2>
-      <span id="scanCount">0 kode</span>
-    </div>
-    <div id="history">
-      <div class="manifest-empty">Riwayat scan akan muncul di sini</div>
-    </div>
-
-    <p class="footer-note">
-      Sesi ini tersimpan sementara di perangkat Anda.<br>
-      Data resmi tercatat di Google Sheet melalui koneksi ke server.
-    </p>
-  </div>
-
-  <!-- ================= SETTINGS MODAL ================= -->
-  <div class="modal-back" id="settingsBack">
-    <div class="modal">
-      <h3>Pengaturan Server</h3>
-      <p class="sub">Sambungkan halaman ini ke Web App Google Apps Script Anda.</p>
-      <div class="field">
-        <label>WEB APP URL (diakhiri /exec)</label>
-        <input type="text" id="inpUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
-      </div>
-      <div class="field">
-        <label>SECRET KEY</label>
-        <input type="text" id="inpSecret" placeholder="Sama persis dengan menu Set Secret di Sheet" autocomplete="off">
-      </div>
-      <div class="test-result" id="testResult"></div>
-      <div class="modal-actions">
-        <button class="btn ghost" id="btnTest">Test Koneksi</button>
-        <button class="btn solid" id="btnSaveSettings">Simpan</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ================= MANUAL ENTRY MODAL ================= -->
-  <div class="modal-back" id="manualBack">
-    <div class="modal">
-      <h3>Input Kode Manual</h3>
-      <p class="sub">Untuk asset dengan label rusak / tidak terbaca kamera.</p>
-      <div class="field">
-        <label>KODE ASSET</label>
-        <input type="text" id="inpManualCode" placeholder="cth. FFE-00231" autocomplete="off">
-      </div>
-      <div class="modal-actions">
-        <button class="btn ghost" id="btnManualCancel">Batal</button>
-        <button class="btn solid" id="btnManualSubmit">Catat</button>
-      </div>
-    </div>
-  </div>
-
-<script>
-  // ============================================================
-  // KONFIGURASI: sekarang disimpan di localStorage lewat menu ⚙
-  // di kanan atas — tidak perlu lagi edit source code tiap ganti
-  // secret atau URL. Buka ⚙ → isi Web App URL & Secret → Simpan.
-  // ============================================================
-  const LS_URL = 'ffe_scanner_webapp_url';
-  const LS_SECRET = 'ffe_scanner_secret';
-
-  let WEBAPP_URL = localStorage.getItem(LS_URL) || '';
-  let SECRET_KEY = localStorage.getItem(LS_SECRET) || '';
-
-  let busy = false;
-  let sessionCount = 0;
-  let lastCode = null, lastCodeTime = 0;
-  let html5QrCode = null;
-  let currentCameraId = null;
-  let cameras = [];
-  let torchOn = false;
-
-  const el = id => document.getElementById(id);
-  const historyEl = el('history');
-  const resultCard = el('resultCard');
-  const scanline = el('scanline');
-  const vfEmpty = el('vfEmpty');
-
-  // ---------- sound + vibration feedback ----------
-  function beep(type){
-    try{
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = type === 'ok' ? 880 : type === 'warn' ? 520 : 300;
-      g.gain.setValueAtTime(0.15, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
-      o.start(); o.stop(ctx.currentTime + 0.18);
-    }catch(e){}
-    if(navigator.vibrate){
-      navigator.vibrate(type === 'ok' ? 60 : type === 'warn' ? [40,40,40] : [80,40,80]);
+    function setMode(mode) {
+      currentMode = mode;
+      const isView = mode === 'view';
+      btnInput.classList.toggle('active', !isView);
+      btnView.classList.toggle('active', isView);
+      btnView.classList.toggle('view-active', isView);
+      readerEl.classList.toggle('view-mode', isView);
+      hintEl.innerHTML = isView
+        ? 'Mode aktif: <b>Lihat Kartu Asset</b> - hasil scan HANYA ditampilkan, tidak dicatat ke Google Sheet.'
+        : 'Mode aktif: <b>Input Data</b> - setiap hasil scan otomatis dicatat ke Google Sheet inventory.';
+      resultEl.innerText = isView
+        ? 'Arahkan kamera ke QR asset untuk melihat kartu asset...'
+        : 'Arahkan kamera ke barcode/QR kode asset...';
     }
-  }
 
-  // ---------- network status ----------
-  function updateNetStatus(){
-    const online = navigator.onLine;
-    el('netDot').className = 'dot ' + (online ? 'on' : 'off');
-    el('netLabel').textContent = online ? 'terhubung ke internet' : 'offline — cek koneksi';
-  }
-  window.addEventListener('online', updateNetStatus);
-  window.addEventListener('offline', updateNetStatus);
-  updateNetStatus();
-
-  // ---------- settings modal ----------
-  el('openSettings').onclick = () => {
-    el('inpUrl').value = WEBAPP_URL;
-    el('inpSecret').value = SECRET_KEY;
-    el('testResult').className = 'test-result';
-    el('settingsBack').classList.add('show');
-  };
-  el('settingsBack').onclick = (e) => { if(e.target === el('settingsBack')) el('settingsBack').classList.remove('show'); };
-
-  el('btnSaveSettings').onclick = () => {
-    WEBAPP_URL = el('inpUrl').value.trim();
-    SECRET_KEY = el('inpSecret').value.trim();
-    localStorage.setItem(LS_URL, WEBAPP_URL);
-    localStorage.setItem(LS_SECRET, SECRET_KEY);
-    el('settingsBack').classList.remove('show');
-    checkConfigured();
-  };
-
-  el('btnTest').onclick = async () => {
-    const url = el('inpUrl').value.trim();
-    const secret = el('inpSecret').value.trim();
-    const box = el('testResult');
-    box.className = 'test-result show';
-    box.textContent = 'Menghubungi server…';
-    if(!url || !secret){
-      box.className = 'test-result show err';
-      box.textContent = 'Isi URL dan Secret terlebih dahulu.';
-      return;
+    function addHistory(text, cls) {
+      const row = document.createElement('div');
+      row.innerHTML = '<span class="' + cls + '">' + text + '</span>';
+      historyEl.prepend(row);
+      while (historyEl.children.length > 8) historyEl.removeChild(historyEl.lastChild);
     }
-    try{
-      const r = await fetch(url, {
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderKartuAsset(item) {
+      const badgeClass = item.category === 'FFE 2' ? 'badge-ffe2' : 'badge-ffe1';
+      let rows = ''
+        + '<tr><td class="label">Kode Asset</td><td class="val">' + escapeHtml(item.number) + '</td></tr>'
+        + '<tr><td class="label">Nama Item</td><td class="val">' + escapeHtml(item.item) + '</td></tr>'
+        + '<tr><td class="label">Kategori</td><td class="val"><span class="badge ' + badgeClass + '">' + escapeHtml(item.category) + '</span></td></tr>'
+        + '<tr><td class="label">Department/PIC</td><td class="val">' + escapeHtml(item.department) + '</td></tr>'
+        + '<tr><td class="label">Lokasi</td><td class="val">' + escapeHtml(item.location) + '</td></tr>'
+        + '<tr><td class="label">Status</td><td class="val">' + escapeHtml(item.status) + '</td></tr>'
+        + '<tr><td class="label">Kondisi</td><td class="val">' + escapeHtml(item.condition) + '</td></tr>';
+      if (item.qty) {
+        rows += '<tr><td class="label">Qty</td><td class="val">' + escapeHtml(item.qty) + '</td></tr>';
+      }
+      if (item.purchaseDate) {
+        rows += '<tr><td class="label">Tgl Perolehan</td><td class="val">' + escapeHtml(item.purchaseDate) + '</td></tr>';
+      }
+      if (item.purchaseValue) {
+        rows += '<tr><td class="label">Harga Perolehan</td><td class="val">Rp ' + Number(item.purchaseValue).toLocaleString('id-ID') + '</td></tr>';
+      }
+      return ''
+        + '<div class="kartu view">'
+        + '  <div class="kartu-title">📋 Kartu Asset</div>'
+        + '  <table>' + rows + '</table>'
+        + '</div>';
+    }
+
+    function onScanSuccess(decodedText) {
+      if (busy) return;
+      busy = true;
+      resultEl.innerHTML = currentMode === 'view'
+        ? 'Mencari data asset: ' + decodedText + ' ...'
+        : 'Memproses kode: ' + decodedText + ' ...';
+
+      fetch(WEBAPP_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ data: '', secret: secret })
-      });
-      const res = await r.json();
-      if(String(res.message || '').toLowerCase().includes('tidak cocok')){
-        box.className = 'test-result show err';
-        box.textContent = '❌ Secret tidak cocok dengan server. Cek kembali menu "Set Secret" di Google Sheet.';
-      } else if(String(res.message || '').toLowerCase().includes('belum diset')){
-        box.className = 'test-result show err';
-        box.textContent = '❌ Secret belum diset di server. Buka menu "Set / Ganti Secret Scanner Eksternal" di Google Sheet.';
-      } else {
-        // secret cocok — server hanya menolak karena data kosong, itu tandanya OK
-        box.className = 'test-result show ok';
-        box.textContent = '✅ Koneksi & secret valid. Siap digunakan untuk scan.';
-      }
-    }catch(err){
-      box.className = 'test-result show err';
-      box.textContent = '❌ Gagal menghubungi URL ini. Periksa Web App URL & pastikan sudah di-deploy (New version).';
-    }
-  };
-
-  function checkConfigured(){
-    if(!WEBAPP_URL || !SECRET_KEY){
-      vfEmpty.textContent = 'Belum dikonfigurasi. Ketuk ⚙ di pojok kanan atas untuk mengisi Web App URL & Secret.';
-      vfEmpty.style.display = 'flex';
-      return false;
-    }
-    return true;
-  }
-
-  // ---------- manual entry modal ----------
-  el('btnManual').onclick = () => {
-    el('inpManualCode').value = '';
-    el('manualBack').classList.add('show');
-    setTimeout(() => el('inpManualCode').focus(), 100);
-  };
-  el('btnManualCancel').onclick = () => el('manualBack').classList.remove('show');
-  el('manualBack').onclick = (e) => { if(e.target === el('manualBack')) el('manualBack').classList.remove('show'); };
-  el('btnManualSubmit').onclick = () => {
-    const code = el('inpManualCode').value.trim();
-    if(!code) return;
-    el('manualBack').classList.remove('show');
-    submitScan(code);
-  };
-  el('inpManualCode').addEventListener('keydown', (e) => {
-    if(e.key === 'Enter') el('btnManualSubmit').click();
-  });
-
-  // ---------- history rendering ----------
-  function addHistory(status, code, sub, time){
-    const icon = status === 'ok' ? '✅' : status === 'warn' ? '⚠' : '❌';
-    const row = document.createElement('div');
-    row.className = 'ticket ' + status;
-    row.innerHTML =
-      '<div class="t-icon">' + icon + '</div>' +
-      '<div class="t-body"><div class="t-code">' + code + '</div><div class="t-sub">' + sub + '</div></div>' +
-      '<div class="t-time">' + time + '</div>';
-    if(historyEl.querySelector('.manifest-empty')) historyEl.innerHTML = '';
-    historyEl.prepend(row);
-    while(historyEl.children.length > 12) historyEl.removeChild(historyEl.lastChild);
-    sessionCount++;
-    el('scanCount').textContent = sessionCount + ' kode';
-  }
-
-  function renderResult(status, codeLine, metaLine){
-    resultCard.className = 'result ' + status;
-    const label = status === 'ok' ? 'Ditemukan' : status === 'warn' ? 'Tidak Dikenal' : 'Gagal';
-    resultCard.innerHTML =
-      '<div class="result-status ' + status + '">' + label + '</div>' +
-      '<div class="result-code">' + codeLine + '</div>' +
-      '<div class="result-meta">' + metaLine + '</div>';
-  }
-
-  // ---------- core submit (dipakai kamera & manual entry) ----------
-  function submitScan(decodedText){
-    if(busy) return;
-    if(!checkConfigured()){
-      renderResult('err', decodedText, 'Konfigurasi server belum lengkap. Buka ⚙ untuk mengisi URL & Secret.');
-      return;
-    }
-    // cegah scan ganda kode yang sama dalam 4 detik
-    const now = Date.now();
-    if(decodedText === lastCode && (now - lastCodeTime) < 4000) return;
-    lastCode = decodedText; lastCodeTime = now;
-
-    busy = true;
-    resultCard.className = 'result';
-    resultCard.innerHTML = '<div class="result-idle">Memproses kode <b>' + decodedText + '</b> …</div>';
-
-    fetch(WEBAPP_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ data: decodedText, secret: SECRET_KEY })
-    })
-      .then(r => r.json())
-      .then(res => {
-        if(res.status !== 'success'){
-          renderResult('err', decodedText, res.message || 'Server menolak permintaan.');
-          addHistory('err', decodedText, res.message || 'Gagal', nowTime());
-          beep('err');
-        } else if(res.found){
-          const it = res.item;
-          renderResult('ok', it.number, (it.item || '-') + '<br>' + (it.department || '-') + ' • ' + (it.location || '-'));
-          addHistory('ok', it.number, it.item || '-', res.timestamp || nowTime());
-          beep('ok');
-        } else {
-          renderResult('warn', decodedText, 'Kode tidak ditemukan di data FFE 1/FFE 2. Tetap dicatat di log scan.');
-          addHistory('warn', decodedText, 'Kode tidak dikenal', res.timestamp || nowTime());
-          beep('warn');
-        }
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
+        body: JSON.stringify({ data: decodedText, secret: SECRET_KEY, mode: currentMode })
       })
-      .catch(err => {
-        renderResult('err', decodedText, 'Gagal menghubungi server: ' + err);
-        addHistory('err', decodedText, 'Gagal terhubung ke server', nowTime());
-        beep('err');
-      })
-      .finally(() => { setTimeout(() => { busy = false; }, 1200); });
-  }
-
-  function nowTime(){
-    const d = new Date();
-    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
-  }
-
-  // ---------- camera ----------
-  function onScanSuccess(decodedText){ submitScan(decodedText); }
-
-  async function startCamera(cameraId){
-    if(html5QrCode){
-      try{ await html5QrCode.stop(); }catch(e){}
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.status !== 'success') {
+            resultEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal') + '</span>';
+            addHistory('❌ ' + (res.message || 'Gagal'), 'err');
+          } else if (res.found) {
+            if (currentMode === 'view') {
+              resultEl.innerHTML = renderKartuAsset(res.item);
+              addHistory('📋 ' + res.timestamp + ' — dilihat: ' + res.item.number + ' (' + res.item.item + ')', 'ok');
+            } else {
+              resultEl.innerHTML =
+                '<span class="ok">✅ ' + res.item.number + ' - ' + res.item.item + '</span><br>' +
+                res.item.department + ' • ' + res.item.location;
+              addHistory('✅ ' + res.timestamp + ' — ' + res.item.number + ' (' + res.item.item + ')', 'ok');
+            }
+          } else {
+            if (currentMode === 'view') {
+              resultEl.innerHTML =
+                '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span>';
+              addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal (mode lihat)', 'warn');
+            } else {
+              resultEl.innerHTML =
+                '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span><br>Tetap dicatat di log scan.';
+              addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal', 'warn');
+            }
+          }
+          setTimeout(function () {
+            busy = false;
+            if (!resultEl.querySelector('.kartu')) {
+              resultEl.innerText = currentMode === 'view'
+                ? 'Arahkan kamera ke QR asset berikutnya...'
+                : 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
+            }
+          }, currentMode === 'view' ? 3200 : 2200);
+        })
+        .catch(function (err) {
+          resultEl.innerHTML = '<span class="err">❌ Gagal menghubungi server: ' + err + '</span>';
+          addHistory('❌ Gagal menghubungi server', 'err');
+          busy = false;
+        });
     }
-    html5QrCode = new Html5Qrcode("reader");
-    try{
-      await html5QrCode.start(
-        cameraId ? { deviceId: { exact: cameraId } } : { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+
+    if (WEBAPP_URL.indexOf('GANTI_DENGAN') !== -1 || SECRET_KEY.indexOf('GANTI_DENGAN') !== -1) {
+      resultEl.innerHTML = '<span class="err">Halaman belum dikonfigurasi. Isi WEBAPP_URL & SECRET_KEY di source code dulu.</span>';
+    } else if (typeof Html5Qrcode === 'undefined') {
+      resultEl.innerHTML = '<span class="err">Gagal memuat library scanner. Periksa koneksi internet lalu muat ulang halaman.</span>';
+    } else {
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
         onScanSuccess
-      );
-      vfEmpty.style.display = 'none';
-      scanline.style.display = 'block';
-    }catch(err){
-      vfEmpty.style.display = 'flex';
-      vfEmpty.textContent = 'Gagal mengakses kamera. Pastikan izin kamera diberikan & halaman dibuka lewat HTTPS.';
-      scanline.style.display = 'none';
+      ).catch(function (err) {
+        resultEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';
+      });
     }
-  }
-
-  el('btnFlip').onclick = async () => {
-    if(cameras.length < 2) return;
-    const idx = cameras.findIndex(c => c.id === currentCameraId);
-    const next = cameras[(idx + 1) % cameras.length];
-    currentCameraId = next.id;
-    torchOn = false;
-    await startCamera(next.id);
-  };
-
-  el('btnTorch').onclick = async () => {
-    if(!html5QrCode) return;
-    try{
-      torchOn = !torchOn;
-      await html5QrCode.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
-      el('btnTorch').style.color = torchOn ? 'var(--amber)' : '';
-    }catch(e){
-      torchOn = false;
-      alert('Senter tidak didukung pada perangkat/browser ini.');
-    }
-  };
-
-  async function initCameraList(){
-    try{
-      cameras = await Html5Qrcode.getCameras();
-      if(cameras && cameras.length){
-        // pilih kamera belakang jika terdeteksi dari label
-        const back = cameras.find(c => /back|rear|environment/i.test(c.label));
-        currentCameraId = (back || cameras[cameras.length - 1]).id;
-        await startCamera(currentCameraId);
-      } else {
-        await startCamera(null);
-      }
-    }catch(e){
-      await startCamera(null);
-    }
-  }
-
-  // ---------- boot ----------
-  if(typeof Html5Qrcode === 'undefined'){
-    vfEmpty.textContent = 'Gagal memuat library scanner. Periksa koneksi internet lalu muat ulang halaman.';
-  } else if(!checkConfigured()){
-    // pesan sudah diset di checkConfigured(), tetap coba nyalakan kamera
-    initCameraList();
-  } else {
-    initCameraList();
-  }
-</script>
+  </script>
 </body>
 </html>

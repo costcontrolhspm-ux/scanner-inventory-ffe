@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lihat Kartu Asset - Inventory</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f2740;
+      color: #fff;
+      margin: 0;
+      padding: 18px 14px 28px;
+      text-align: center;
+      min-height: 100vh;
+    }
+    h3 { margin: 4px 0 14px; font-size: 17px; }
+    #reader {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 2px solid #1d4ed8;
+    }
+    #status {
+      margin: 14px auto 0;
+      max-width: 420px;
+      font-size: 13.5px;
+      min-height: 20px;
+    }
+    .ok { color: #4ade80; font-weight: 600; }
+    .warn { color: #fbbf24; font-weight: 600; }
+    .err { color: #f87171; font-weight: 600; }
+
+    /* ---- Kartu Asset (read-only, tidak ada input apa pun) ---- */
+    #card {
+      display: none;
+      max-width: 420px;
+      margin: 14px auto 0;
+      background: linear-gradient(155deg, #16324f 0%, #0f2740 100%);
+      border: 1px solid #1d4ed8;
+      border-radius: 14px;
+      padding: 18px;
+      text-align: left;
+    }
+    #card .cardHead {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #2a4a6b;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    #cardNumber { font-size: 19px; font-weight: 700; letter-spacing: 0.5px; }
+    #cardCategory {
+      background: #1d4ed8;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #cardItem { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+    .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13.5px; border-bottom: 1px dashed #22415f; }
+    .row span:first-child { color: #93a5bb; }
+    .row span:last-child { font-weight: 600; text-align: right; }
+    #cardFoto { width: 100%; border-radius: 10px; margin-top: 12px; max-height: 200px; object-fit: cover; }
+
+    .hint { color: #93a5bb; font-size: 12px; margin-top: 14px; max-width: 420px; margin-left: auto; margin-right: auto; }
+  </style>
+</head>
+<body>
+  <h3>🪪 Lihat Kartu Asset</h3>
+  <div id="reader"></div>
+  <div id="status">Arahkan kamera ke barcode/QR kode asset...</div>
+
+  <!-- Kartu ini murni tampilan - tidak ada tombol simpan/edit apa pun -->
+  <div id="card">
+    <div class="cardHead">
+      <div id="cardNumber">-</div>
+      <div id="cardCategory">-</div>
+    </div>
+    <div id="cardItem">-</div>
+    <div class="row"><span>Department / PIC</span><span id="cardDept">-</span></div>
+    <div class="row"><span>Lokasi</span><span id="cardLoc">-</span></div>
+    <div class="row"><span>Status</span><span id="cardStatus">-</span></div>
+    <div class="row"><span>Condition</span><span id="cardCondition">-</span></div>
+    <div class="row"><span>Qty</span><span id="cardQty">-</span></div>
+    <img id="cardFoto" style="display:none;">
+  </div>
+
+  <div class="hint">Halaman ini HANYA menampilkan data (read-only) - tidak pernah mencatat scan atau mengubah data apa pun di sheet.</div>
+
+  <script>
+    // ==========================================================
+    // WAJIB DIISI sebelum di-deploy:
+    // 1. WEBAPP_URL  -> URL deployment Web App Apps Script Anda, akhiran "/exec"
+    // 2. SECRET_KEY   -> HARUS SAMA PERSIS dengan secret yang diset lewat menu
+    //    Google Sheets "🔑 Set / Ganti Secret Scanner Eksternal"
+    //
+    // CATATAN KEAMANAN: halaman ini statis, SECRET_KEY pasti terlihat lewat
+    // "view source". Anggap sebagai "kunci pintu gudang", bukan password
+    // rahasia mutlak.
+    //
+    // HALAMAN INI 100% READ-ONLY: memakai jalur doGet(?action=lookup) di
+    // Code.gs (handleLookupRequest_), yang TIDAK PERNAH menulis ke sheet
+    // manapun (tidak ke Sheet1 log, tidak ke Log Perubahan). Cocok dibagikan
+    // ke siapa pun yang cuma perlu mengecek info asset lewat scan QR, tanpa
+    // risiko data ikut berubah. Untuk input scan / edit data, pakai
+    // scanner-input-update.html.
+    // ==========================================================
+    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyiexYQMZGQTL2FLQqPtMxUCJdeI2MQeB_5g4C6FiTkpJ34NtCohU3Jd11uUVzjTu9t/exec';
+    const SECRET_KEY = 'Malang2026';
+
+    let busy = false;
+    const statusEl = document.getElementById('status');
+    const cardEl = document.getElementById('card');
+
+    function fillCard(item) {
+      document.getElementById('cardNumber').innerText = item.number || '-';
+      document.getElementById('cardCategory').innerText = item.category || '-';
+      document.getElementById('cardItem').innerText = item.item || '-';
+      document.getElementById('cardDept').innerText = item.department || '-';
+      document.getElementById('cardLoc').innerText = item.location || '-';
+      document.getElementById('cardStatus').innerText = item.status || '-';
+      document.getElementById('cardCondition').innerText = item.condition || '-';
+      document.getElementById('cardQty').innerText = item.qty != null ? item.qty : '-';
+
+      const fotoEl = document.getElementById('cardFoto');
+      if (item.foto) {
+        fotoEl.src = item.foto;
+        fotoEl.style.display = 'block';
+      } else {
+        fotoEl.style.display = 'none';
+      }
+      cardEl.style.display = 'block';
+    }
+
+    // Read-only: pakai GET ke ?action=lookup, TIDAK PERNAH mengirim POST /
+    // tidak pernah memicu penulisan data apa pun di server.
+    function onScanSuccess(decodedText) {
+      if (busy) return;
+      busy = true;
+      cardEl.style.display = 'none';
+      statusEl.innerHTML = 'Mencari data untuk kode: ' + decodedText + ' ...';
+
+      const url = WEBAPP_URL
+        + '?action=lookup'
+        + '&data=' + encodeURIComponent(decodedText)
+        + '&secret=' + encodeURIComponent(SECRET_KEY);
+
+      fetch(url, { method: 'GET' })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.status !== 'success') {
+            statusEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal') + '</span>';
+          } else if (res.found) {
+            statusEl.innerHTML = '<span class="ok">✅ Data ditemukan</span>';
+            fillCard(res.item);
+          } else {
+            statusEl.innerHTML = '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span>';
+          }
+          setTimeout(function () {
+            busy = false;
+            statusEl.innerText = 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
+          }, 2000);
+        })
+        .catch(function (err) {
+          statusEl.innerHTML = '<span class="err">❌ Gagal menghubungi server: ' + err + '</span>';
+          busy = false;
+        });
+    }
+
+    if (WEBAPP_URL.indexOf('GANTI_DENGAN') !== -1 || SECRET_KEY.indexOf('GANTI_DENGAN') !== -1) {
+      statusEl.innerHTML = '<span class="err">Halaman belum dikonfigurasi. Isi WEBAPP_URL & SECRET_KEY di source code dulu.</span>';
+    } else if (typeof Html5Qrcode === 'undefined') {
+      statusEl.innerHTML = '<span class="err">Gagal memuat library scanner. Periksa koneksi internet lalu muat ulang halaman.</span>';
+    } else {
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      ).catch(function (err) {
+        statusEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';
+      });
+    }
+  </script>
+</body>
+</html>

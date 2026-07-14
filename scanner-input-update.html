@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan & Update Asset - Inventory</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f2740;
+      color: #fff;
+      margin: 0;
+      padding: 18px 14px 28px;
+      text-align: center;
+      min-height: 100vh;
+    }
+    h3 { margin: 4px 0 14px; font-size: 17px; }
+    #reader {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 2px solid #1d4ed8;
+    }
+    #result {
+      margin: 16px auto 0;
+      max-width: 420px;
+      padding: 14px;
+      border-radius: 10px;
+      background: #16324f;
+      min-height: 40px;
+      font-size: 14px;
+      line-height: 1.5;
+      text-align: left;
+    }
+    .ok { color: #4ade80; font-weight: 600; }
+    .warn { color: #fbbf24; font-weight: 600; }
+    .err { color: #f87171; font-weight: 600; }
+
+    /* ---- Form edit field asset ---- */
+    #editForm {
+      display: none;
+      max-width: 420px;
+      margin: 14px auto 0;
+      background: #16324f;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: left;
+    }
+    #editForm label {
+      display: block;
+      font-size: 12.5px;
+      color: #93a5bb;
+      margin: 10px 0 4px;
+    }
+    #editForm input, #editForm select {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid #2a4a6b;
+      background: #0f2740;
+      color: #fff;
+      font-size: 14px;
+    }
+    .btnRow { display: flex; gap: 8px; margin-top: 16px; }
+    .btnRow button {
+      flex: 1;
+      padding: 11px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btnSave { background: #1d4ed8; color: #fff; }
+    #btnSkip { background: #2a4a6b; color: #cbd5e1; }
+    #btnSave:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #history {
+      max-width: 420px;
+      margin: 18px auto 0;
+      text-align: left;
+      font-size: 12.5px;
+      color: #cbd5e1;
+    }
+    #history div { padding: 6px 8px; border-bottom: 1px solid #1e3a5f; }
+    .hint { color: #93a5bb; font-size: 12px; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <h3>📥 Scan & Input/Update Asset</h3>
+  <div id="reader"></div>
+  <div id="result">Arahkan kamera ke barcode/QR kode asset...</div>
+
+  <!-- Form ini HANYA muncul setelah scan berhasil & data asset ditemukan -->
+  <div id="editForm">
+    <div style="font-size:13px;color:#93a5bb;">
+      Kode: <b id="fCode" style="color:#fff;"></b> — <span id="fItem"></span>
+    </div>
+    <label>Department / PIC</label>
+    <input id="fDepartment" type="text" placeholder="Department / pemegang asset">
+    <label>Lokasi</label>
+    <input id="fLocation" type="text" placeholder="Lokasi asset">
+    <label>Condition</label>
+    <input id="fCondition" type="text" placeholder="Baik / Rusak / Perlu Perbaikan">
+    <label>Status</label>
+    <input id="fStatus" type="text" placeholder="Status asset">
+    <div class="btnRow">
+      <button id="btnSkip">Lewati</button>
+      <button id="btnSave">💾 Simpan Perubahan</button>
+    </div>
+  </div>
+
+  <div id="history"></div>
+  <div class="hint">Setiap scan otomatis dicatat ke log. Ubah field di atas kalau ada perubahan data, lalu tekan Simpan.</div>
+
+  <script>
+    // ==========================================================
+    // WAJIB DIISI sebelum di-deploy:
+    // 1. WEBAPP_URL  -> URL deployment Web App Apps Script Anda, akhiran "/exec"
+    // 2. SECRET_KEY   -> HARUS SAMA PERSIS dengan secret yang diset lewat menu
+    //    Google Sheets "🔑 Set / Ganti Secret Scanner Eksternal"
+    //
+    // CATATAN KEAMANAN: halaman ini statis, SECRET_KEY pasti terlihat lewat
+    // "view source". Anggap sebagai "kunci pintu gudang", bukan password
+    // rahasia mutlak. Ganti secara berkala lewat menu di atas kalau perlu.
+    //
+    // HALAMAN INI HANYA BOLEH DIPAKAI OLEH PETUGAS YANG BERHAK MENGUBAH DATA
+    // (input scan + edit Department/Lokasi/Condition/Status). Untuk sekadar
+    // melihat kartu asset tanpa mengubah apa pun, pakai scanner-view-kartu.html.
+    // ==========================================================
+    const WEBAPP_URL = 'GANTI_DENGAN_URL_WEBAPP_ANDA';
+    const SECRET_KEY = 'GANTI_DENGAN_SECRET_ANDA';
+
+    let busy = false;
+    let currentItem = null; // item hasil scan terakhir, dipakai saat Simpan Perubahan
+    const historyEl = document.getElementById('history');
+    const resultEl = document.getElementById('result');
+    const editForm = document.getElementById('editForm');
+
+    function addHistory(text, cls) {
+      const row = document.createElement('div');
+      row.innerHTML = '<span class="' + cls + '">' + text + '</span>';
+      historyEl.prepend(row);
+      while (historyEl.children.length > 8) historyEl.removeChild(historyEl.lastChild);
+    }
+
+    function resetForNextScan() {
+      busy = false;
+      currentItem = null;
+      editForm.style.display = 'none';
+      resultEl.innerText = 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
+    }
+
+    function showEditForm(item) {
+      currentItem = item;
+      document.getElementById('fCode').innerText = item.number;
+      document.getElementById('fItem').innerText = item.item;
+      document.getElementById('fDepartment').value = item.department || '';
+      document.getElementById('fLocation').value = item.location || '';
+      document.getElementById('fCondition').value = item.condition || '';
+      document.getElementById('fStatus').value = item.status || '';
+      editForm.style.display = 'block';
+    }
+
+    // Langkah 1: setiap kode yang discan langsung dicatat sebagai INPUT
+    // (mode default doPost = 'input') -> masuk ke Sheet1 + Log Perubahan.
+    function onScanSuccess(decodedText) {
+      if (busy) return;
+      busy = true;
+      editForm.style.display = 'none';
+      resultEl.innerHTML = 'Memproses kode: ' + decodedText + ' ...';
+
+      fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
+        body: JSON.stringify({ data: decodedText, secret: SECRET_KEY })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.status !== 'success') {
+            resultEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal') + '</span>';
+            addHistory('❌ ' + (res.message || 'Gagal'), 'err');
+            busy = false;
+            return;
+          }
+          if (res.found) {
+            resultEl.innerHTML =
+              '<span class="ok">✅ Dicatat: ' + res.item.number + ' - ' + res.item.item + '</span><br>' +
+              res.item.department + ' • ' + res.item.location;
+            addHistory('✅ ' + res.timestamp + ' — ' + res.item.number + ' (input)', 'ok');
+            // Tampilkan form supaya petugas bisa langsung update kalau ada perubahan
+            showEditForm(res.item);
+          } else {
+            resultEl.innerHTML =
+              '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span><br>Tetap dicatat di log scan.';
+            addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal', 'warn');
+            busy = false;
+          }
+        })
+        .catch(function (err) {
+          resultEl.innerHTML = '<span class="err">❌ Gagal menghubungi server: ' + err + '</span>';
+          addHistory('❌ Gagal menghubungi server', 'err');
+          busy = false;
+        });
+    }
+
+    // Langkah 2 (opsional): kirim mode='update' HANYA kalau petugas mengubah
+    // salah satu field di form dan menekan tombol Simpan Perubahan.
+    document.getElementById('btnSave').addEventListener('click', function () {
+      if (!currentItem) return;
+      const updates = {
+        department: document.getElementById('fDepartment').value.trim(),
+        location: document.getElementById('fLocation').value.trim(),
+        condition: document.getElementById('fCondition').value.trim(),
+        status: document.getElementById('fStatus').value.trim()
+      };
+
+      document.getElementById('btnSave').disabled = true;
+      resultEl.innerHTML = 'Menyimpan perubahan...';
+
+      fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          data: currentItem.number,
+          secret: SECRET_KEY,
+          mode: 'update',
+          category: currentItem.category,
+          updates: updates
+        })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          document.getElementById('btnSave').disabled = false;
+          if (res.status !== 'success') {
+            resultEl.innerHTML = '<span class="warn">⚠️ ' + (res.message || 'Tidak ada perubahan') + '</span>';
+            addHistory('⚠️ ' + (res.message || 'Tidak ada perubahan'), 'warn');
+          } else {
+            resultEl.innerHTML = '<span class="ok">✅ Perubahan data ' + res.item.number + ' tersimpan.</span>';
+            addHistory('💾 ' + res.timestamp + ' — ' + res.item.number + ' (update)', 'ok');
+          }
+          setTimeout(resetForNextScan, 1600);
+        })
+        .catch(function (err) {
+          document.getElementById('btnSave').disabled = false;
+          resultEl.innerHTML = '<span class="err">❌ Gagal menyimpan: ' + err + '</span>';
+        });
+    });
+
+    document.getElementById('btnSkip').addEventListener('click', function () {
+      resetForNextScan();
+    });
+
+    if (WEBAPP_URL.indexOf('GANTI_DENGAN') !== -1 || SECRET_KEY.indexOf('GANTI_DENGAN') !== -1) {
+      resultEl.innerHTML = '<span class="err">Halaman belum dikonfigurasi. Isi WEBAPP_URL & SECRET_KEY di source code dulu.</span>';
+    } else if (typeof Html5Qrcode === 'undefined') {
+      resultEl.innerHTML = '<span class="err">Gagal memuat library scanner. Periksa koneksi internet lalu muat ulang halaman.</span>';
+    } else {
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      ).catch(function (err) {
+        resultEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';
+      });
+    }
+  </script>
+</body>
+</html>

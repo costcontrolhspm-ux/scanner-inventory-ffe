@@ -135,6 +135,8 @@
       <div class="row"><span>Status</span><span id="cardStatus">-</span></div>
       <div class="row"><span>Condition</span><span id="cardCondition">-</span></div>
       <div class="row"><span>Qty</span><span id="cardQty">-</span></div>
+      <div class="row"><span>Harga Beli</span><span id="cardPurchaseValue">-</span></div>
+      <div class="row"><span>Nilai Buku</span><span id="cardValueBook">-</span></div>
       <img id="cardFoto" style="display:none;">
       <button id="cardScanAgainBtn">📷 Scan Lagi</button>
     </div>
@@ -165,6 +167,14 @@
     const statusEl = document.getElementById('status');
     const overlayEl = document.getElementById('cardOverlay');
 
+    // Format angka jadi "Rp 1.500.000" - kembalikan "-" kalau nilainya
+    // kosong/0 (kolom Purchase Value / Value Book memang belum wajib diisi
+    // semua asset, lihat catatan di Code.gs).
+    function formatRupiah(num) {
+      if (num === null || num === undefined || num === 0 || isNaN(num)) return '-';
+      return 'Rp ' + Number(num).toLocaleString('id-ID');
+    }
+
     function fillCard(item) {
       document.getElementById('cardNumber').innerText = item.number || '-';
       document.getElementById('cardCategory').innerText = item.category || '-';
@@ -174,6 +184,8 @@
       document.getElementById('cardStatus').innerText = item.status || '-';
       document.getElementById('cardCondition').innerText = item.condition || '-';
       document.getElementById('cardQty').innerText = item.qty != null ? item.qty : '-';
+      document.getElementById('cardPurchaseValue').innerText = formatRupiah(item.purchaseValue);
+      document.getElementById('cardValueBook').innerText = formatRupiah(item.valueBook);
 
       const fotoEl = document.getElementById('cardFoto');
       if (item.foto) {

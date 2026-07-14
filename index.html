@@ -18,7 +18,7 @@
     }
     h3 { margin: 4px 0 14px; font-size: 17px; }
 
-    /* ---- Toggle 2 mode ---- */
+    /* ==== Toggle mode Input / Lihat ==== */
     #modeToggle {
       display: flex;
       max-width: 420px;
@@ -32,20 +32,27 @@
       flex: 1;
       border: none;
       background: transparent;
-      color: #9fb3c8;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 10px 6px;
+      color: #93a5bb;
+      padding: 10px 8px;
       border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      transition: background .15s, color .15s;
     }
-    #modeToggle button.active {
+    #modeToggle button.active.mode-input {
       background: #1d4ed8;
       color: #fff;
     }
-    #modeToggle button.active.view-active {
-      background: #0e7490;
+    #modeToggle button.active.mode-view {
+      background: #0891b2;
+      color: #fff;
+    }
+    #modeLabel {
+      max-width: 420px;
+      margin: 0 auto 12px;
+      font-size: 12px;
+      color: #93a5bb;
     }
 
     #reader {
@@ -55,9 +62,9 @@
       border-radius: 14px;
       overflow: hidden;
       border: 2px solid #1d4ed8;
-      transition: border-color 0.15s;
+      transition: border-color .15s;
     }
-    #reader.view-mode { border-color: #0e7490; }
+    #reader.mode-view { border-color: #0891b2; }
 
     #result {
       margin: 16px auto 0;
@@ -72,37 +79,7 @@
     .ok { color: #4ade80; font-weight: 600; }
     .warn { color: #fbbf24; font-weight: 600; }
     .err { color: #f87171; font-weight: 600; }
-
-    /* ---- Kartu Asset (mode "Lihat Kartu Asset") ---- */
-    .kartu {
-      text-align: left;
-      background: #0f2740;
-      border: 1px solid #1d4ed8;
-      border-radius: 10px;
-      padding: 12px 14px;
-      margin-top: 4px;
-    }
-    .kartu.view { border-color: #0e7490; }
-    .kartu .kartu-title {
-      font-size: 15px;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 6px;
-    }
-    .kartu table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .kartu table td { padding: 3px 0; vertical-align: top; }
-    .kartu table td.label { color: #93a5bb; width: 40%; white-space: nowrap; }
-    .kartu table td.val { color: #e2e8f0; font-weight: 600; }
-    .kartu .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 11.5px;
-      font-weight: 700;
-    }
-    .badge-ffe1 { background: #1d4ed8; color: #fff; }
-    .badge-ffe2 { background: #7c3aed; color: #fff; }
-
+    .view { color: #22d3ee; font-weight: 600; }
     #history {
       max-width: 420px;
       margin: 18px auto 0;
@@ -118,14 +95,15 @@
   <h3>📷 Scan Barcode / QR Asset</h3>
 
   <div id="modeToggle">
-    <button id="btnModeInput" class="active" onclick="setMode('input')">✍️ Input Data</button>
-    <button id="btnModeView" onclick="setMode('view')">📋 Lihat Kartu Asset</button>
+    <button type="button" id="btnModeInput" class="active mode-input">📝 Input Data</button>
+    <button type="button" id="btnModeView" class="mode-view">👁️ Lihat Data</button>
   </div>
+  <div id="modeLabel">Mode: <b id="modeLabelText">Input Data</b> — hasil scan akan <b id="modeLabelEffect">dicatat ke log</b>.</div>
 
-  <div id="reader"></div>
+  <div id="reader" class="mode-input"></div>
   <div id="result">Arahkan kamera ke barcode/QR kode asset...</div>
   <div id="history"></div>
-  <div class="hint" id="hintText">Mode aktif: <b>Input Data</b> - setiap hasil scan otomatis dicatat ke Google Sheet inventory.</div>
+  <div class="hint">Halaman ini otomatis mencatat hasil scan ke Google Sheet inventory saat mode "Input Data" aktif. Mode "Lihat Data" hanya menampilkan info asset, TIDAK mencatat apa pun.</div>
 
   <script>
     // ==========================================================
@@ -142,44 +120,46 @@
     // bot, BUKAN mencegah orang yang memang berniat jahat dan mau capek-capek
     // membaca source code. Untuk keamanan lebih tinggi, ganti secret ini secara
     // berkala lewat menu di atas.
-    //
-    // ==========================================================
-    // FITUR 2 MODE:
-    // - "Input Data"        -> perilaku lama (default): hasil scan dicatat ke
-    //   Sheet1 + Log Perubahan di backend (processScan_ / doPost mode=input).
-    // - "Lihat Kartu Asset" -> HANYA menampilkan info asset (kartu) di layar,
-    //   TIDAK menulis apa pun ke sheet (backend memakai lookupAsset_ / doPost
-    //   mode=view). Cocok dipakai untuk cek cepat info asset tanpa mengubah
-    //   data log/riwayat.
-    // Pastikan Code.gs di backend sudah diperbarui (menambahkan lookupAsset_
-    // dan pengecekan "mode" di doPost) supaya toggle ini benar-benar berfungsi.
     // ==========================================================
     const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzxkckkPqqP941voakxwslX-3RRkn62zAyJY7PB6tozZvYGU6ItXqOlAFUdlwzhs8NO/exec';
     const SECRET_KEY = 'Malang2026';
 
+    // Mode aktif sekarang: 'input' (dicatat ke Sheet1 + Log Perubahan) atau
+    // 'view' (hanya lookup, TIDAK menulis apa pun). Dikirim ke server lewat
+    // field "mode" supaya doPost() di Code.gs tahu harus lookup-only atau
+    // proses-dan-catat.
+    let currentMode = 'input';
+
     let busy = false;
-    let currentMode = 'input'; // 'input' | 'view'
     const historyEl = document.getElementById('history');
     const resultEl = document.getElementById('result');
     const readerEl = document.getElementById('reader');
-    const hintEl = document.getElementById('hintText');
-    const btnInput = document.getElementById('btnModeInput');
-    const btnView = document.getElementById('btnModeView');
+    const btnModeInput = document.getElementById('btnModeInput');
+    const btnModeView = document.getElementById('btnModeView');
+    const modeLabelText = document.getElementById('modeLabelText');
+    const modeLabelEffect = document.getElementById('modeLabelEffect');
 
     function setMode(mode) {
       currentMode = mode;
       const isView = mode === 'view';
-      btnInput.classList.toggle('active', !isView);
-      btnView.classList.toggle('active', isView);
-      btnView.classList.toggle('view-active', isView);
-      readerEl.classList.toggle('view-mode', isView);
-      hintEl.innerHTML = isView
-        ? 'Mode aktif: <b>Lihat Kartu Asset</b> - hasil scan HANYA ditampilkan, tidak dicatat ke Google Sheet.'
-        : 'Mode aktif: <b>Input Data</b> - setiap hasil scan otomatis dicatat ke Google Sheet inventory.';
+
+      btnModeInput.classList.toggle('active', !isView);
+      btnModeView.classList.toggle('active', isView);
+      readerEl.classList.toggle('mode-view', isView);
+      readerEl.classList.toggle('mode-input', !isView);
+
+      modeLabelText.textContent = isView ? 'Lihat Data' : 'Input Data';
+      modeLabelEffect.textContent = isView
+        ? 'HANYA ditampilkan, tidak dicatat ke log'
+        : 'dicatat ke log';
+
       resultEl.innerText = isView
-        ? 'Arahkan kamera ke QR asset untuk melihat kartu asset...'
+        ? 'Arahkan kamera ke barcode/QR untuk melihat info asset (tidak dicatat)...'
         : 'Arahkan kamera ke barcode/QR kode asset...';
     }
+
+    btnModeInput.addEventListener('click', function () { if (!busy) setMode('input'); });
+    btnModeView.addEventListener('click', function () { if (!busy) setMode('view'); });
 
     function addHistory(text, cls) {
       const row = document.createElement('div');
@@ -188,83 +168,43 @@
       while (historyEl.children.length > 8) historyEl.removeChild(historyEl.lastChild);
     }
 
-    function escapeHtml(s) {
-      return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
-    function renderKartuAsset(item) {
-      const badgeClass = item.category === 'FFE 2' ? 'badge-ffe2' : 'badge-ffe1';
-      let rows = ''
-        + '<tr><td class="label">Kode Asset</td><td class="val">' + escapeHtml(item.number) + '</td></tr>'
-        + '<tr><td class="label">Nama Item</td><td class="val">' + escapeHtml(item.item) + '</td></tr>'
-        + '<tr><td class="label">Kategori</td><td class="val"><span class="badge ' + badgeClass + '">' + escapeHtml(item.category) + '</span></td></tr>'
-        + '<tr><td class="label">Department/PIC</td><td class="val">' + escapeHtml(item.department) + '</td></tr>'
-        + '<tr><td class="label">Lokasi</td><td class="val">' + escapeHtml(item.location) + '</td></tr>'
-        + '<tr><td class="label">Status</td><td class="val">' + escapeHtml(item.status) + '</td></tr>'
-        + '<tr><td class="label">Kondisi</td><td class="val">' + escapeHtml(item.condition) + '</td></tr>';
-      if (item.qty) {
-        rows += '<tr><td class="label">Qty</td><td class="val">' + escapeHtml(item.qty) + '</td></tr>';
-      }
-      if (item.purchaseDate) {
-        rows += '<tr><td class="label">Tgl Perolehan</td><td class="val">' + escapeHtml(item.purchaseDate) + '</td></tr>';
-      }
-      if (item.purchaseValue) {
-        rows += '<tr><td class="label">Harga Perolehan</td><td class="val">Rp ' + Number(item.purchaseValue).toLocaleString('id-ID') + '</td></tr>';
-      }
-      return ''
-        + '<div class="kartu view">'
-        + '  <div class="kartu-title">📋 Kartu Asset</div>'
-        + '  <table>' + rows + '</table>'
-        + '</div>';
-    }
-
     function onScanSuccess(decodedText) {
       if (busy) return;
       busy = true;
-      resultEl.innerHTML = currentMode === 'view'
-        ? 'Mencari data asset: ' + decodedText + ' ...'
-        : 'Memproses kode: ' + decodedText + ' ...';
+      const modeAtScan = currentMode; // kunci mode saat scan terjadi, jaga2 kalau user ganti toggle saat request masih berjalan
+      resultEl.innerHTML = 'Memproses kode: ' + decodedText + ' ...';
 
       fetch(WEBAPP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
-        body: JSON.stringify({ data: decodedText, secret: SECRET_KEY, mode: currentMode })
+        body: JSON.stringify({ data: decodedText, secret: SECRET_KEY, mode: modeAtScan })
       })
         .then(function (r) { return r.json(); })
         .then(function (res) {
+          const isView = modeAtScan === 'view';
           if (res.status !== 'success') {
             resultEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal') + '</span>';
             addHistory('❌ ' + (res.message || 'Gagal'), 'err');
           } else if (res.found) {
-            if (currentMode === 'view') {
-              resultEl.innerHTML = renderKartuAsset(res.item);
-              addHistory('📋 ' + res.timestamp + ' — dilihat: ' + res.item.number + ' (' + res.item.item + ')', 'ok');
-            } else {
-              resultEl.innerHTML =
-                '<span class="ok">✅ ' + res.item.number + ' - ' + res.item.item + '</span><br>' +
-                res.item.department + ' • ' + res.item.location;
-              addHistory('✅ ' + res.timestamp + ' — ' + res.item.number + ' (' + res.item.item + ')', 'ok');
-            }
+            const tagClass = isView ? 'view' : 'ok';
+            const tagIcon = isView ? '👁️' : '✅';
+            resultEl.innerHTML =
+              '<span class="' + tagClass + '">' + tagIcon + ' ' + res.item.number + ' - ' + res.item.item + '</span><br>' +
+              res.item.department + ' • ' + res.item.location +
+              (isView ? '<br><small>(mode lihat - tidak dicatat)</small>' : '');
+            addHistory(tagIcon + ' ' + res.timestamp + ' — ' + res.item.number + ' (' + res.item.item + ')' + (isView ? ' [lihat saja]' : ''), tagClass);
           } else {
-            if (currentMode === 'view') {
-              resultEl.innerHTML =
-                '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span>';
-              addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal (mode lihat)', 'warn');
-            } else {
-              resultEl.innerHTML =
-                '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span><br>Tetap dicatat di log scan.';
-              addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal', 'warn');
-            }
+            resultEl.innerHTML =
+              '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span>' +
+              (isView ? '' : '<br>Tetap dicatat di log scan.');
+            addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal' + (isView ? ' [lihat saja]' : ''), 'warn');
           }
           setTimeout(function () {
             busy = false;
-            if (!resultEl.querySelector('.kartu')) {
-              resultEl.innerText = currentMode === 'view'
-                ? 'Arahkan kamera ke QR asset berikutnya...'
-                : 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
-            }
-          }, currentMode === 'view' ? 3200 : 2200);
+            resultEl.innerText = modeAtScan === 'view'
+              ? 'Arahkan kamera ke barcode/QR untuk melihat info asset (tidak dicatat)...'
+              : 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
+          }, 2200);
         })
         .catch(function (err) {
           resultEl.innerHTML = '<span class="err">❌ Gagal menghubungi server: ' + err + '</span>';

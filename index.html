@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Scan Barcode - Inventory</title>
+  <title>Scan & Update Asset - Inventory</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -18,38 +17,6 @@
       min-height: 100vh;
     }
     h3 { margin: 4px 0 14px; font-size: 17px; }
-
-    /* ==== Toggle mode Input / Lihat ==== */
-    #modeToggle {
-      display: flex;
-      max-width: 420px;
-      margin: 0 auto 14px;
-      background: #16324f;
-      border-radius: 10px;
-      padding: 4px;
-      gap: 4px;
-    }
-    #modeToggle button {
-      flex: 1;
-      border: none;
-      background: transparent;
-      color: #93a5bb;
-      padding: 10px 8px;
-      border-radius: 8px;
-      font-size: 13.5px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background .15s, color .15s;
-    }
-    #modeToggle button.active.mode-input { background: #1d4ed8; color: #fff; }
-    #modeToggle button.active.mode-view  { background: #0891b2; color: #fff; }
-    #modeLabel {
-      max-width: 420px;
-      margin: 0 auto 12px;
-      font-size: 12px;
-      color: #93a5bb;
-    }
-
     #reader {
       width: 100%;
       max-width: 420px;
@@ -57,23 +24,60 @@
       border-radius: 14px;
       overflow: hidden;
       border: 2px solid #1d4ed8;
-      transition: border-color .15s;
     }
-    #reader.mode-view { border-color: #0891b2; }
-
     #result {
       margin: 16px auto 0;
       max-width: 420px;
       padding: 14px;
       border-radius: 10px;
       background: #16324f;
-      min-height: 54px;
+      min-height: 40px;
       font-size: 14px;
       line-height: 1.5;
+      text-align: left;
     }
     .ok { color: #4ade80; font-weight: 600; }
     .warn { color: #fbbf24; font-weight: 600; }
     .err { color: #f87171; font-weight: 600; }
+
+    /* ---- Form edit field asset ---- */
+    #editForm {
+      display: none;
+      max-width: 420px;
+      margin: 14px auto 0;
+      background: #16324f;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: left;
+    }
+    #editForm label {
+      display: block;
+      font-size: 12.5px;
+      color: #93a5bb;
+      margin: 10px 0 4px;
+    }
+    #editForm input, #editForm select {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid #2a4a6b;
+      background: #0f2740;
+      color: #fff;
+      font-size: 14px;
+    }
+    .btnRow { display: flex; gap: 8px; margin-top: 16px; }
+    .btnRow button {
+      flex: 1;
+      padding: 11px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btnSave { background: #1d4ed8; color: #fff; }
+    #btnSkip { background: #2a4a6b; color: #cbd5e1; }
+    #btnSave:disabled { opacity: 0.5; cursor: not-allowed; }
 
     #history {
       max-width: 420px;
@@ -84,220 +88,58 @@
     }
     #history div { padding: 6px 8px; border-bottom: 1px solid #1e3a5f; }
     .hint { color: #93a5bb; font-size: 12px; margin-top: 14px; }
-
-    /* ==== Kartu Aset (mode Lihat Data) - sama persis gaya dgn Dashboard ==== */
-    #kartuWrap { max-width: 420px; margin: 16px auto 0; display: none; }
-    .ka-card-wrap {
-      background: #fff;
-      color: #161b22;
-      border-radius: 14px;
-      border: 2px solid #1a2029;
-      padding: 20px;
-      text-align: center;
-    }
-    .ka-card-wrap .ka-org { font-family: 'Barlow Condensed', sans-serif, Arial; font-weight: 700; font-size: 14px; letter-spacing: .05em; text-transform: uppercase; color: #1a2029; margin-bottom: 2px; }
-    .ka-card-wrap .ka-sub { font-size: 10px; color: #5c6b7a; margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace, monospace; }
-    .ka-card-wrap .ka-foto { margin-bottom: 12px; border-radius: 10px; overflow: hidden; border: 1px solid #d7dee6; }
-    .ka-card-wrap .ka-foto img { width: 100%; max-height: 190px; object-fit: cover; display: block; }
-    .ka-card-wrap .ka-foto-empty { padding: 22px 8px; font-size: 11px; color: #8a97a6; background: #f4f6f8; }
-    .ka-card-wrap .ka-qr { display: flex; justify-content: center; margin-bottom: 12px; }
-    .ka-card-wrap .ka-number { font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 17px; letter-spacing: .03em; color: #1a2029; margin-bottom: 4px; }
-    .ka-card-wrap .ka-item { font-family: 'Barlow Condensed', sans-serif, Arial; font-weight: 600; font-size: 19px; color: #1a2029; margin-bottom: 10px; }
-    .ka-card-wrap .ka-grid { text-align: left; font-size: 12px; line-height: 1.9; color: #333; border-top: 1px dashed #c7d0da; padding-top: 10px; }
-    .ka-card-wrap .ka-grid b { color: #1a2029; }
-
-    /* ==== Form Edit (mode Input Data) ==== */
-    #editWrap { max-width: 420px; margin: 14px auto 0; display: none; }
-    .edit-card {
-      background: #16324f;
-      border: 1px solid #1e3a5f;
-      border-radius: 12px;
-      padding: 16px;
-      text-align: left;
-    }
-    .edit-card h4 { margin: 0 0 12px; font-size: 14px; color: #93a5bb; }
-    .edit-field { margin-bottom: 10px; }
-    .edit-field label { display: block; font-size: 11.5px; color: #93a5bb; margin-bottom: 4px; }
-    .edit-field input, .edit-field select {
-      width: 100%;
-      padding: 9px 10px;
-      border-radius: 8px;
-      border: 1px solid #2a4d70;
-      background: #0f2740;
-      color: #fff;
-      font-size: 13.5px;
-    }
-    .edit-actions { display: flex; gap: 8px; margin-top: 12px; }
-    .edit-actions button {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    #btnSaveEdit { background: #22c55e; color: #08290f; }
-    #btnCancelEdit { background: #334155; color: #fff; }
-    #btnOpenEdit {
-      width: 100%;
-      margin-top: 10px;
-      padding: 10px;
-      border: none;
-      border-radius: 8px;
-      background: #f59e0b;
-      color: #2b1b02;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-      display: none;
-    }
-    .edit-msg { font-size: 12px; margin-top: 8px; }
-    .edit-msg.ok { color: #4ade80; }
-    .edit-msg.err { color: #f87171; }
   </style>
 </head>
 <body>
-  <h3>📷 Scan Barcode / QR Asset</h3>
-
-  <div id="modeToggle">
-    <button type="button" id="btnModeInput" class="active mode-input">📝 Input Data</button>
-    <button type="button" id="btnModeView" class="mode-view">👁️ Lihat Data</button>
-  </div>
-  <div id="modeLabel">Mode: <b id="modeLabelText">Input Data</b> — hasil scan akan <b id="modeLabelEffect">dicatat ke log</b>.</div>
-
-  <div id="reader" class="mode-input"></div>
+  <h3>📥 Scan & Input/Update Asset</h3>
+  <div id="reader"></div>
   <div id="result">Arahkan kamera ke barcode/QR kode asset...</div>
 
-  <!-- Tombol edit muncul setelah scan mode Input berhasil menemukan data -->
-  <button type="button" id="btnOpenEdit">✏️ Edit Data Asset Ini</button>
-
-  <!-- Form edit (Department/Lokasi/Condition/Status) -->
-  <div id="editWrap">
-    <div class="edit-card">
-      <h4>✏️ Edit: <span id="editItemLabel"></span></h4>
-      <div class="edit-field">
-        <label>Department / PIC</label>
-        <input type="text" id="editDepartment">
-      </div>
-      <div class="edit-field">
-        <label>Lokasi</label>
-        <input type="text" id="editLocation">
-      </div>
-      <div class="edit-field">
-        <label>Condition</label>
-        <input type="text" id="editCondition" list="conditionOptions">
-        <datalist id="conditionOptions">
-          <option value="Baik">
-          <option value="Rusak">
-          <option value="Perlu Perbaikan">
-        </datalist>
-      </div>
-      <div class="edit-field">
-        <label>Status</label>
-        <input type="text" id="editStatus" list="statusOptions">
-        <datalist id="statusOptions">
-          <option value="Aktif">
-          <option value="Nonaktif - Rusak">
-          <option value="Nonaktif - Disposal">
-          <option value="Nonaktif - Scrap Warehouse">
-        </datalist>
-      </div>
-      <div class="edit-actions">
-        <button type="button" id="btnSaveEdit">💾 Simpan Perubahan</button>
-        <button type="button" id="btnCancelEdit">Batal</button>
-      </div>
-      <div id="editMsg" class="edit-msg"></div>
+  <!-- Form ini HANYA muncul setelah scan berhasil & data asset ditemukan -->
+  <div id="editForm">
+    <div style="font-size:13px;color:#93a5bb;">
+      Kode: <b id="fCode" style="color:#fff;"></b> — <span id="fItem"></span>
+    </div>
+    <label>Department / PIC</label>
+    <input id="fDepartment" type="text" placeholder="Department / pemegang asset">
+    <label>Lokasi</label>
+    <input id="fLocation" type="text" placeholder="Lokasi asset">
+    <label>Condition</label>
+    <input id="fCondition" type="text" placeholder="Baik / Rusak / Perlu Perbaikan">
+    <label>Status</label>
+    <input id="fStatus" type="text" placeholder="Status asset">
+    <div class="btnRow">
+      <button id="btnSkip">Lewati</button>
+      <button id="btnSave">💾 Simpan Perubahan</button>
     </div>
   </div>
 
-  <!-- Kartu Aset ala Dashboard (mode Lihat Data) -->
-  <div id="kartuWrap"></div>
-
   <div id="history"></div>
-  <div class="hint">Mode "Input Data" mencatat hasil scan ke Google Sheet inventory dan bisa langsung diedit. Mode "Lihat Data" hanya menampilkan Kartu Aset, TIDAK mencatat apa pun.</div>
-
-  <div style="max-width:420px;margin:18px auto 0;">
-    <button type="button" id="btnDiag" style="width:100%;padding:10px;border:none;border-radius:8px;background:#334155;color:#cbd5e1;font-size:12.5px;cursor:pointer;">
-      🔧 Tes Koneksi &amp; Cek Versi Server
-    </button>
-    <div id="diagResult" style="font-size:11.5px;color:#93a5bb;margin-top:8px;text-align:left;white-space:pre-wrap;"></div>
-  </div>
+  <div class="hint">Setiap scan otomatis dicatat ke log. Ubah field di atas kalau ada perubahan data, lalu tekan Simpan.</div>
 
   <script>
     // ==========================================================
     // WAJIB DIISI sebelum di-deploy:
     // 1. WEBAPP_URL  -> URL deployment Web App Apps Script Anda, akhiran "/exec"
-    // 2. SECRET_KEY   -> HARUS SAMA PERSIS dengan secret di menu Google Sheets
-    //    "🔑 Set / Ganti Secret Scanner Eksternal"
+    // 2. SECRET_KEY   -> HARUS SAMA PERSIS dengan secret yang diset lewat menu
+    //    Google Sheets "🔑 Set / Ganti Secret Scanner Eksternal"
     //
-    // CATATAN KEAMANAN: halaman ini statis (mis. di-host di GitHub Pages),
-    // SECRET_KEY ini terlihat oleh siapa pun yang membuka "view source".
-    // Anggap sebagai "kunci pintu gudang" (mencegah akses acak/bot), bukan
-    // password rahasia mutlak. Ganti berkala lewat menu di atas jika perlu.
+    // CATATAN KEAMANAN: halaman ini statis, SECRET_KEY pasti terlihat lewat
+    // "view source". Anggap sebagai "kunci pintu gudang", bukan password
+    // rahasia mutlak. Ganti secara berkala lewat menu di atas kalau perlu.
+    //
+    // HALAMAN INI HANYA BOLEH DIPAKAI OLEH PETUGAS YANG BERHAK MENGUBAH DATA
+    // (input scan + edit Department/Lokasi/Condition/Status). Untuk sekadar
+    // melihat kartu asset tanpa mengubah apa pun, pakai scanner-view-kartu.html.
     // ==========================================================
-    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzxkckkPqqP941voakxwslX-3RRkn62zAyJY7PB6tozZvYGU6ItXqOlAFUdlwzhs8NO/exec';
+    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyiexYQMZGQTL2FLQqPtMxUCJdeI2MQeB_5g4C6FiTkpJ34NtCohU3Jd11uUVzjTu9t/exec';
     const SECRET_KEY = 'Malang2026';
 
-    let currentMode = 'input'; // 'input' atau 'view'
     let busy = false;
-    let lastItem = null; // item hasil scan terakhir (mode input), dipakai utk edit
-
+    let currentItem = null; // item hasil scan terakhir, dipakai saat Simpan Perubahan
     const historyEl = document.getElementById('history');
     const resultEl = document.getElementById('result');
-    const readerEl = document.getElementById('reader');
-    const btnModeInput = document.getElementById('btnModeInput');
-    const btnModeView = document.getElementById('btnModeView');
-    const modeLabelText = document.getElementById('modeLabelText');
-    const modeLabelEffect = document.getElementById('modeLabelEffect');
-    const kartuWrapEl = document.getElementById('kartuWrap');
-    const editWrapEl = document.getElementById('editWrap');
-    const btnOpenEdit = document.getElementById('btnOpenEdit');
-    const btnSaveEdit = document.getElementById('btnSaveEdit');
-    const btnCancelEdit = document.getElementById('btnCancelEdit');
-    const editMsgEl = document.getElementById('editMsg');
-
-    function escapeHtml(str) {
-      if (str === null || str === undefined) return '';
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-    function formatRupiah(num) {
-      num = Number(num) || 0;
-      return 'Rp ' + num.toLocaleString('id-ID', { maximumFractionDigits: 0 });
-    }
-
-    function resetPanels() {
-      kartuWrapEl.style.display = 'none';
-      kartuWrapEl.innerHTML = '';
-      editWrapEl.style.display = 'none';
-      btnOpenEdit.style.display = 'none';
-      editMsgEl.textContent = '';
-      lastItem = null;
-    }
-
-    function setMode(mode) {
-      currentMode = mode;
-      const isView = mode === 'view';
-
-      btnModeInput.classList.toggle('active', !isView);
-      btnModeView.classList.toggle('active', isView);
-      readerEl.classList.toggle('mode-view', isView);
-      readerEl.classList.toggle('mode-input', !isView);
-
-      modeLabelText.textContent = isView ? 'Lihat Data' : 'Input Data';
-      modeLabelEffect.textContent = isView
-        ? 'HANYA ditampilkan (Kartu Aset), tidak dicatat ke log'
-        : 'dicatat ke log & bisa langsung diedit';
-
-      resultEl.innerText = isView
-        ? 'Arahkan kamera ke barcode/QR untuk melihat Kartu Aset (tidak dicatat)...'
-        : 'Arahkan kamera ke barcode/QR kode asset...';
-
-      resetPanels();
-    }
-
-    btnModeInput.addEventListener('click', function () { if (!busy) setMode('input'); });
-    btnModeView.addEventListener('click', function () { if (!busy) setMode('view'); });
+    const editForm = document.getElementById('editForm');
 
     function addHistory(text, cls) {
       const row = document.createElement('div');
@@ -306,183 +148,58 @@
       while (historyEl.children.length > 8) historyEl.removeChild(historyEl.lastChild);
     }
 
-    // ===================== KARTU ASET (mode Lihat Data) =====================
-    // Dibuat SAMA PERSIS gayanya dengan modal "Kartu Aset" di Dashboard, supaya
-    // hasil scan mode "Lihat Data" tampil identik dengan kartu identitas asset.
-    function renderKartuAset(item) {
-      const qrId = 'qr_' + Math.random().toString(36).slice(2);
-      const fotoHtml = item.foto
-        ? '<div class="ka-foto"><img src="' + escapeHtml(item.foto) + '" alt="Foto ' + escapeHtml(item.number) + '"></div>'
-        : '<div class="ka-foto ka-foto-empty">Foto belum diupload</div>';
-
-      kartuWrapEl.innerHTML =
-        '<div class="ka-card-wrap">' +
-          '<div class="ka-org">Asset Control — Inventory FFE</div>' +
-          '<div class="ka-sub">Kartu Identitas Asset</div>' +
-          fotoHtml +
-          '<div class="ka-qr" id="' + qrId + '"></div>' +
-          '<div class="ka-number">' + escapeHtml(item.number) + '</div>' +
-          '<div class="ka-item">' + escapeHtml(item.item) + '</div>' +
-          '<div class="ka-grid">' +
-            '<div><b>Kategori:</b> ' + escapeHtml(item.category) + '</div>' +
-            '<div><b>Department / PIC:</b> ' + escapeHtml(item.department) + '</div>' +
-            '<div><b>Lokasi:</b> ' + escapeHtml(item.location) + '</div>' +
-            '<div><b>Condition:</b> ' + escapeHtml(item.condition) + '</div>' +
-            '<div><b>Status:</b> ' + escapeHtml(item.status) + '</div>' +
-            '<div><b>Harga Pembelian:</b> ' + (item.purchaseValue ? formatRupiah(item.purchaseValue) : '-') + '</div>' +
-            '<div><b>Nilai Buku:</b> ' + (item.valueBook ? formatRupiah(item.valueBook) : '-') + '</div>' +
-          '</div>' +
-        '</div>';
-      kartuWrapEl.style.display = 'block';
-
-      setTimeout(function () {
-        if (typeof QRCode === 'undefined') return;
-        new QRCode(document.getElementById(qrId), {
-          text: item.number,
-          width: 150, height: 150,
-          colorDark: '#1a2029', colorLight: '#ffffff'
-        });
-      }, 30);
+    function resetForNextScan() {
+      busy = false;
+      currentItem = null;
+      editForm.style.display = 'none';
+      resultEl.innerText = 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
     }
 
-    // ===================== EDIT DATA (mode Input Data) =====================
-    function openEditForm(item) {
-      lastItem = item;
-      document.getElementById('editItemLabel').textContent = item.number + ' - ' + item.item;
-      document.getElementById('editDepartment').value = item.department || '';
-      document.getElementById('editLocation').value = item.location || '';
-      document.getElementById('editCondition').value = item.condition || '';
-      document.getElementById('editStatus').value = item.status || '';
-      editMsgEl.textContent = '';
-      editWrapEl.style.display = 'block';
+    function showEditForm(item) {
+      currentItem = item;
+      document.getElementById('fCode').innerText = item.number;
+      document.getElementById('fItem').innerText = item.item;
+      document.getElementById('fDepartment').value = item.department || '';
+      document.getElementById('fLocation').value = item.location || '';
+      document.getElementById('fCondition').value = item.condition || '';
+      document.getElementById('fStatus').value = item.status || '';
+      editForm.style.display = 'block';
     }
 
-    btnOpenEdit.addEventListener('click', function () {
-      if (lastItem) openEditForm(lastItem);
-    });
-
-    btnCancelEdit.addEventListener('click', function () {
-      editWrapEl.style.display = 'none';
-    });
-
-    btnSaveEdit.addEventListener('click', function () {
-      if (!lastItem) return;
-      btnSaveEdit.disabled = true;
-      editMsgEl.className = 'edit-msg';
-      editMsgEl.textContent = 'Menyimpan...';
-
-      const updates = {
-        department: document.getElementById('editDepartment').value,
-        location: document.getElementById('editLocation').value,
-        condition: document.getElementById('editCondition').value,
-        status: document.getElementById('editStatus').value
-      };
-
-      callServer_({
-        data: lastItem.number,
-        category: lastItem.category,
-        secret: SECRET_KEY,
-        mode: 'update',
-        updates: updates
-      })
-        .then(function (res) {
-          btnSaveEdit.disabled = false;
-          if (res.status !== 'success') {
-            editMsgEl.className = 'edit-msg err';
-            editMsgEl.textContent = '❌ ' + (res.message || 'Gagal menyimpan perubahan.');
-            return;
-          }
-          editMsgEl.className = 'edit-msg ok';
-          editMsgEl.textContent = '✅ Perubahan disimpan.';
-          lastItem = res.item;
-          // Refresh tampilan hasil scan utama dengan data terbaru
-          resultEl.innerHTML =
-            '<span class="ok">✅ ' + escapeHtml(res.item.number) + ' - ' + escapeHtml(res.item.item) + '</span><br>' +
-            escapeHtml(res.item.department) + ' • ' + escapeHtml(res.item.location) +
-            '<br><small>Condition: ' + escapeHtml(res.item.condition) + ' • Status: ' + escapeHtml(res.item.status) + '</small>';
-          addHistory('✏️ ' + res.timestamp + ' — ' + res.item.number + ' diedit', 'ok');
-          setTimeout(function () { editWrapEl.style.display = 'none'; }, 1200);
-        })
-        .catch(function (err) {
-          btnSaveEdit.disabled = false;
-          editMsgEl.className = 'edit-msg err';
-          editMsgEl.textContent = '❌ Gagal menghubungi server: ' + err;
-        });
-    });
-
-    // ===================== SCAN HANDLER =====================
-    // CATATAN: mode "view" sempat dicoba lewat GET (?action=lookup) supaya
-    // jalurnya terpisah total dari doPost, TAPI ternyata fetch GET lintas-
-    // domain (dari GitHub Pages ke script.google.com) sering diblokir CORS
-    // oleh browser ("Failed to fetch"), sementara POST sudah terbukti jalan.
-    // Jadi sekarang SEMUA request (input/view/update) pakai POST seperti
-    // semula - bedanya, di server (Code.gs) mode "view" dialihkan ke fungsi
-    // handleLookupRequest_() yang TERPISAH dan HANYA baca data, tidak pernah
-    // memanggil processScan_ (fungsi yang menulis ke Sheet1/Log Perubahan).
-    function callServer_(payload) {
-      return fetch(WEBAPP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
-        body: JSON.stringify(payload)
-      }).then(function (r) { return r.json(); });
-    }
-
+    // Langkah 1: setiap kode yang discan langsung dicatat sebagai INPUT
+    // (mode default doPost = 'input') -> masuk ke Sheet1 + Log Perubahan.
     function onScanSuccess(decodedText) {
       if (busy) return;
       busy = true;
-      const modeAtScan = currentMode; // kunci mode saat scan terjadi
-      resetPanels();
+      editForm.style.display = 'none';
       resultEl.innerHTML = 'Memproses kode: ' + decodedText + ' ...';
 
-      const isView = modeAtScan === 'view';
-
-      callServer_({ data: decodedText, secret: SECRET_KEY, mode: isView ? 'view' : 'input' })
+      fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
+        body: JSON.stringify({ data: decodedText, secret: SECRET_KEY })
+      })
+        .then(function (r) { return r.json(); })
         .then(function (res) {
-          // Diagnostik: kalau field codeVersion tidak ada sama sekali di
-          // response, berarti deployment Web App yang aktif MASIH VERSI LAMA
-          // (Apps Script tidak auto-update /exec - wajib buat deployment
-          // version baru lewat Deploy > Manage deployments > Edit > New
-          // version). Ditulis ke console supaya kelihatan saat debug.
-          if (!res.codeVersion) {
-            console.warn('[Scanner] Response TANPA codeVersion - deployment /exec kemungkinan masih kode LAMA. Buat "New version" di Manage deployments.');
-          } else {
-            console.log('[Scanner] Server codeVersion:', res.codeVersion, '| mode:', res.mode);
-          }
-
           if (res.status !== 'success') {
             resultEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal') + '</span>';
             addHistory('❌ ' + (res.message || 'Gagal'), 'err');
-          } else if (res.found) {
-            if (isView) {
-              resultEl.innerHTML = '<span class="ok">👁️ Kartu Aset ditemukan - lihat di bawah</span>';
-              renderKartuAset(res.item);
-              addHistory('👁️ ' + res.timestamp + ' — ' + res.item.number + ' (' + res.item.item + ') [lihat saja]', 'ok');
-            } else {
-              resultEl.innerHTML =
-                '<span class="ok">✅ ' + escapeHtml(res.item.number) + ' - ' + escapeHtml(res.item.item) + '</span><br>' +
-                escapeHtml(res.item.department) + ' • ' + escapeHtml(res.item.location) +
-                '<br><small>Condition: ' + escapeHtml(res.item.condition) + ' • Status: ' + escapeHtml(res.item.status) + '</small>';
-              addHistory('✅ ' + res.timestamp + ' — ' + res.item.number + ' (' + res.item.item + ')', 'ok');
-              lastItem = res.item;
-              btnOpenEdit.style.display = 'block';
-            }
+            busy = false;
+            return;
+          }
+          if (res.found) {
+            resultEl.innerHTML =
+              '<span class="ok">✅ Dicatat: ' + res.item.number + ' - ' + res.item.item + '</span><br>' +
+              res.item.department + ' • ' + res.item.location;
+            addHistory('✅ ' + res.timestamp + ' — ' + res.item.number + ' (input)', 'ok');
+            // Tampilkan form supaya petugas bisa langsung update kalau ada perubahan
+            showEditForm(res.item);
           } else {
             resultEl.innerHTML =
-              '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span>' +
-              (isView ? '' : '<br>Tetap dicatat di log scan.');
-            addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal' + (isView ? ' [lihat saja]' : ''), 'warn');
-          }
-
-          setTimeout(function () {
+              '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span><br>Tetap dicatat di log scan.';
+            addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal', 'warn');
             busy = false;
-            if (!(res.found && !isView)) {
-              // Untuk mode input yang berhasil ketemu, biarkan teks hasil +
-              // tombol edit tetap tampil (jangan langsung ditimpa pesan default).
-              resultEl.innerText = isView
-                ? 'Arahkan kamera ke barcode/QR untuk melihat Kartu Aset berikutnya...'
-                : 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
-            }
-          }, 2200);
+          }
         })
         .catch(function (err) {
           resultEl.innerHTML = '<span class="err">❌ Gagal menghubungi server: ' + err + '</span>';
@@ -490,6 +207,53 @@
           busy = false;
         });
     }
+
+    // Langkah 2 (opsional): kirim mode='update' HANYA kalau petugas mengubah
+    // salah satu field di form dan menekan tombol Simpan Perubahan.
+    document.getElementById('btnSave').addEventListener('click', function () {
+      if (!currentItem) return;
+      const updates = {
+        department: document.getElementById('fDepartment').value.trim(),
+        location: document.getElementById('fLocation').value.trim(),
+        condition: document.getElementById('fCondition').value.trim(),
+        status: document.getElementById('fStatus').value.trim()
+      };
+
+      document.getElementById('btnSave').disabled = true;
+      resultEl.innerHTML = 'Menyimpan perubahan...';
+
+      fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          data: currentItem.number,
+          secret: SECRET_KEY,
+          mode: 'update',
+          category: currentItem.category,
+          updates: updates
+        })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          document.getElementById('btnSave').disabled = false;
+          if (res.status !== 'success') {
+            resultEl.innerHTML = '<span class="warn">⚠️ ' + (res.message || 'Tidak ada perubahan') + '</span>';
+            addHistory('⚠️ ' + (res.message || 'Tidak ada perubahan'), 'warn');
+          } else {
+            resultEl.innerHTML = '<span class="ok">✅ Perubahan data ' + res.item.number + ' tersimpan.</span>';
+            addHistory('💾 ' + res.timestamp + ' — ' + res.item.number + ' (update)', 'ok');
+          }
+          setTimeout(resetForNextScan, 1600);
+        })
+        .catch(function (err) {
+          document.getElementById('btnSave').disabled = false;
+          resultEl.innerHTML = '<span class="err">❌ Gagal menyimpan: ' + err + '</span>';
+        });
+    });
+
+    document.getElementById('btnSkip').addEventListener('click', function () {
+      resetForNextScan();
+    });
 
     if (WEBAPP_URL.indexOf('GANTI_DENGAN') !== -1 || SECRET_KEY.indexOf('GANTI_DENGAN') !== -1) {
       resultEl.innerHTML = '<span class="err">Halaman belum dikonfigurasi. Isi WEBAPP_URL & SECRET_KEY di source code dulu.</span>';
@@ -505,36 +269,6 @@
         resultEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';
       });
     }
-    // ===================== DIAGNOSTIK =====================
-    // Tombol ini memanggil server (POST, mode 'view' = read-only lookup)
-    // dengan kode uji "TESTKONEKSI-9999" (hampir pasti tidak ada di data
-    // Anda -> found:false, itu NORMAL & diharapkan). Tujuannya BUKAN mencari
-    // data, tapi:
-    // 1. Memastikan koneksi ke Web App berhasil (bukan error jaringan).
-    // 2. Melihat field "codeVersion" di response - kalau field ini TIDAK ADA,
-    //    berarti deployment /exec Anda masih menjalankan kode LAMA (server
-    //    belum di-deploy ulang sebagai versi baru).
-    // Silakan cek juga di sheet "Sheet1" & "Log Perubahan" setelah menekan
-    // tombol ini - seharusnya TIDAK ADA baris baru yang tercatat, karena
-    // mode 'view' hanya memanggil handleLookupRequest_() yang read-only.
-    document.getElementById('btnDiag').addEventListener('click', function () {
-      const diagEl = document.getElementById('diagResult');
-      diagEl.textContent = 'Menghubungi server...';
-      callServer_({ data: 'TESTKONEKSI-9999', secret: SECRET_KEY, mode: 'view' })
-        .then(function (res) {
-          const lines = [];
-          lines.push('Status: response diterima dari server.');
-          lines.push('codeVersion dari server: ' + (res.codeVersion || '(TIDAK ADA - deployment masih kode LAMA! Buat "New version" di Manage deployments)'));
-          lines.push('mode dari server: ' + (res.mode || '-'));
-          lines.push('found: ' + res.found + ' (harusnya false untuk kode uji ini - itu normal)');
-          lines.push('');
-          lines.push('Cek juga sheet "Sheet1" & "Log Perubahan" - seharusnya TIDAK ada baris baru dari tes ini.');
-          diagEl.textContent = lines.join('\n');
-        })
-        .catch(function (err) {
-          diagEl.textContent = '❌ Gagal menghubungi server: ' + err + '\nCek WEBAPP_URL, koneksi internet, atau status deployment Web App.';
-        });
-    });
   </script>
 </body>
 </html>

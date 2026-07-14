@@ -35,16 +35,46 @@
     .warn { color: #fbbf24; font-weight: 600; }
     .err { color: #f87171; font-weight: 600; }
 
-    /* ---- Kartu Asset (read-only, tidak ada input apa pun) ---- */
-    #card {
+    /* ---- Overlay popup kartu asset (read-only, tidak ada input apa pun) ---- */
+    #cardOverlay {
       display: none;
-      max-width: 420px;
-      margin: 14px auto 0;
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 15, 28, 0.72);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    #card {
+      width: 100%;
+      max-width: 380px;
+      max-height: 88vh;
+      overflow-y: auto;
       background: linear-gradient(155deg, #16324f 0%, #0f2740 100%);
       border: 1px solid #1d4ed8;
-      border-radius: 14px;
-      padding: 18px;
+      border-radius: 16px;
+      padding: 20px;
       text-align: left;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+      position: relative;
+      animation: popIn 0.18s ease-out;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.92); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+    #cardCloseBtn {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      background: none;
+      border: none;
+      color: #93a5bb;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px;
     }
     #card .cardHead {
       display: flex;
@@ -53,6 +83,7 @@
       border-bottom: 1px solid #2a4a6b;
       padding-bottom: 10px;
       margin-bottom: 10px;
+      padding-right: 22px;
     }
     #cardNumber { font-size: 19px; font-weight: 700; letter-spacing: 0.5px; }
     #cardCategory {
@@ -68,6 +99,18 @@
     .row span:first-child { color: #93a5bb; }
     .row span:last-child { font-weight: 600; text-align: right; }
     #cardFoto { width: 100%; border-radius: 10px; margin-top: 12px; max-height: 200px; object-fit: cover; }
+    #cardScanAgainBtn {
+      width: 100%;
+      margin-top: 16px;
+      padding: 11px;
+      border: none;
+      border-radius: 8px;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
 
     .hint { color: #93a5bb; font-size: 12px; margin-top: 14px; max-width: 420px; margin-left: auto; margin-right: auto; }
   </style>
@@ -76,23 +119,26 @@
   <h3>🪪 Lihat Kartu Asset</h3>
   <div id="reader"></div>
   <div id="status">Arahkan kamera ke barcode/QR kode asset...</div>
-
-  <!-- Kartu ini murni tampilan - tidak ada tombol simpan/edit apa pun -->
-  <div id="card">
-    <div class="cardHead">
-      <div id="cardNumber">-</div>
-      <div id="cardCategory">-</div>
-    </div>
-    <div id="cardItem">-</div>
-    <div class="row"><span>Department / PIC</span><span id="cardDept">-</span></div>
-    <div class="row"><span>Lokasi</span><span id="cardLoc">-</span></div>
-    <div class="row"><span>Status</span><span id="cardStatus">-</span></div>
-    <div class="row"><span>Condition</span><span id="cardCondition">-</span></div>
-    <div class="row"><span>Qty</span><span id="cardQty">-</span></div>
-    <img id="cardFoto" style="display:none;">
-  </div>
-
   <div class="hint">Halaman ini HANYA menampilkan data (read-only) - tidak pernah mencatat scan atau mengubah data apa pun di sheet.</div>
+
+  <!-- Popup kartu asset - murni tampilan, tidak ada tombol simpan/edit apa pun -->
+  <div id="cardOverlay">
+    <div id="card">
+      <button id="cardCloseBtn" title="Tutup">✕</button>
+      <div class="cardHead">
+        <div id="cardNumber">-</div>
+        <div id="cardCategory">-</div>
+      </div>
+      <div id="cardItem">-</div>
+      <div class="row"><span>Department / PIC</span><span id="cardDept">-</span></div>
+      <div class="row"><span>Lokasi</span><span id="cardLoc">-</span></div>
+      <div class="row"><span>Status</span><span id="cardStatus">-</span></div>
+      <div class="row"><span>Condition</span><span id="cardCondition">-</span></div>
+      <div class="row"><span>Qty</span><span id="cardQty">-</span></div>
+      <img id="cardFoto" style="display:none;">
+      <button id="cardScanAgainBtn">📷 Scan Lagi</button>
+    </div>
+  </div>
 
   <script>
     // ==========================================================
@@ -112,12 +158,12 @@
     // risiko data ikut berubah. Untuk input scan / edit data, pakai
     // scanner-input-update.html.
     // ==========================================================
-    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyiexYQMZGQTL2FLQqPtMxUCJdeI2MQeB_5g4C6FiTkpJ34NtCohU3Jd11uUVzjTu9t/exec';
-    const SECRET_KEY = 'Malang2026';
+    const WEBAPP_URL = 'GANTI_DENGAN_URL_WEBAPP_ANDA';
+    const SECRET_KEY = 'GANTI_DENGAN_SECRET_ANDA';
 
     let busy = false;
     const statusEl = document.getElementById('status');
-    const cardEl = document.getElementById('card');
+    const overlayEl = document.getElementById('cardOverlay');
 
     function fillCard(item) {
       document.getElementById('cardNumber').innerText = item.number || '-';
@@ -136,15 +182,28 @@
       } else {
         fotoEl.style.display = 'none';
       }
-      cardEl.style.display = 'block';
+      overlayEl.style.display = 'flex';
     }
+
+    // Menutup popup & langsung siap scan kode berikutnya (tanpa perlu
+    // menunggu jeda 2 detik seperti kalau otomatis).
+    function closeCardAndResume() {
+      overlayEl.style.display = 'none';
+      busy = false;
+      statusEl.innerText = 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
+    }
+    document.getElementById('cardCloseBtn').addEventListener('click', closeCardAndResume);
+    document.getElementById('cardScanAgainBtn').addEventListener('click', closeCardAndResume);
+    // Klik area gelap di luar kartu juga menutup popup
+    overlayEl.addEventListener('click', function (e) {
+      if (e.target === overlayEl) closeCardAndResume();
+    });
 
     // Read-only: pakai GET ke ?action=lookup, TIDAK PERNAH mengirim POST /
     // tidak pernah memicu penulisan data apa pun di server.
     function onScanSuccess(decodedText) {
       if (busy) return;
       busy = true;
-      cardEl.style.display = 'none';
       statusEl.innerHTML = 'Mencari data untuk kode: ' + decodedText + ' ...';
 
       const url = WEBAPP_URL
@@ -157,16 +216,17 @@
         .then(function (res) {
           if (res.status !== 'success') {
             statusEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal') + '</span>';
+            busy = false;
           } else if (res.found) {
             statusEl.innerHTML = '<span class="ok">✅ Data ditemukan</span>';
-            fillCard(res.item);
+            fillCard(res.item); // popup muncul, busy tetap true sampai ditutup manual
           } else {
             statusEl.innerHTML = '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span>';
+            setTimeout(function () {
+              busy = false;
+              statusEl.innerText = 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
+            }, 2000);
           }
-          setTimeout(function () {
-            busy = false;
-            statusEl.innerText = 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
-          }, 2000);
         })
         .catch(function (err) {
           statusEl.innerHTML = '<span class="err">❌ Gagal menghubungi server: ' + err + '</span>';

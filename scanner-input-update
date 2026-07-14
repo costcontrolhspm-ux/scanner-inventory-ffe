@@ -132,8 +132,8 @@
     // (input scan + edit Department/Lokasi/Condition/Status). Untuk sekadar
     // melihat kartu asset tanpa mengubah apa pun, pakai scanner-view-kartu.html.
     // ==========================================================
-    const WEBAPP_URL = 'GANTI_DENGAN_URL_WEBAPP_ANDA';
-    const SECRET_KEY = 'GANTI_DENGAN_SECRET_ANDA';
+    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyiexYQMZGQTL2FLQqPtMxUCJdeI2MQeB_5g4C6FiTkpJ34NtCohU3Jd11uUVzjTu9t/exec';
+    const SECRET_KEY = 'Malang2026';
 
     let busy = false;
     let currentItem = null; // item hasil scan terakhir, dipakai saat Simpan Perubahan

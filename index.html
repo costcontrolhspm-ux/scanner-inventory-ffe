@@ -378,18 +378,13 @@
         status: document.getElementById('editStatus').value
       };
 
-      fetch(WEBAPP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          data: lastItem.number,
-          category: lastItem.category,
-          secret: SECRET_KEY,
-          mode: 'update',
-          updates: updates
-        })
+      callServer_({
+        data: lastItem.number,
+        category: lastItem.category,
+        secret: SECRET_KEY,
+        mode: 'update',
+        updates: updates
       })
-        .then(function (r) { return r.json(); })
         .then(function (res) {
           btnSaveEdit.disabled = false;
           if (res.status !== 'success') {
@@ -416,16 +411,20 @@
     });
 
     // ===================== SCAN HANDLER =====================
-    // PENTING: mode "view" sekarang pakai GET ke endpoint lookup terpisah
-    // (?action=lookup), BUKAN POST dengan field mode seperti sebelumnya.
-    // Ini supaya jalur "hanya lihat" 100% terpisah dari jalur input/tulis -
-    // tidak mungkin ketiban logika tulis dari fungsi lain di server, dan
-    // bisa dites langsung dengan paste URL GET di browser.
-    function buildLookupUrl_(code) {
-      const sep = WEBAPP_URL.indexOf('?') === -1 ? '?' : '&';
-      return WEBAPP_URL + sep + 'action=lookup'
-        + '&data=' + encodeURIComponent(code)
-        + '&secret=' + encodeURIComponent(SECRET_KEY);
+    // CATATAN: mode "view" sempat dicoba lewat GET (?action=lookup) supaya
+    // jalurnya terpisah total dari doPost, TAPI ternyata fetch GET lintas-
+    // domain (dari GitHub Pages ke script.google.com) sering diblokir CORS
+    // oleh browser ("Failed to fetch"), sementara POST sudah terbukti jalan.
+    // Jadi sekarang SEMUA request (input/view/update) pakai POST seperti
+    // semula - bedanya, di server (Code.gs) mode "view" dialihkan ke fungsi
+    // handleLookupRequest_() yang TERPISAH dan HANYA baca data, tidak pernah
+    // memanggil processScan_ (fungsi yang menulis ke Sheet1/Log Perubahan).
+    function callServer_(payload) {
+      return fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
+        body: JSON.stringify(payload)
+      }).then(function (r) { return r.json(); });
     }
 
     function onScanSuccess(decodedText) {
@@ -437,16 +436,7 @@
 
       const isView = modeAtScan === 'view';
 
-      const request = isView
-        ? fetch(buildLookupUrl_(decodedText), { method: 'GET' })
-        : fetch(WEBAPP_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
-            body: JSON.stringify({ data: decodedText, secret: SECRET_KEY, mode: 'input' })
-          });
-
-      request
-        .then(function (r) { return r.json(); })
+      callServer_({ data: decodedText, secret: SECRET_KEY, mode: isView ? 'view' : 'input' })
         .then(function (res) {
           // Diagnostik: kalau field codeVersion tidak ada sama sekali di
           // response, berarti deployment Web App yang aktif MASIH VERSI LAMA
@@ -516,24 +506,24 @@
       });
     }
     // ===================== DIAGNOSTIK =====================
-    // Tombol ini memanggil endpoint lookup (GET, read-only) dengan kode uji
-    // "TESTKONEKSI-9999" (hampir pasti tidak ada di data Anda -> found:false,
-    // itu NORMAL & diharapkan). Tujuannya BUKAN mencari data, tapi:
-    // 1. Memastikan koneksi ke Web App berhasil (bukan error jaringan/CORS).
+    // Tombol ini memanggil server (POST, mode 'view' = read-only lookup)
+    // dengan kode uji "TESTKONEKSI-9999" (hampir pasti tidak ada di data
+    // Anda -> found:false, itu NORMAL & diharapkan). Tujuannya BUKAN mencari
+    // data, tapi:
+    // 1. Memastikan koneksi ke Web App berhasil (bukan error jaringan).
     // 2. Melihat field "codeVersion" di response - kalau field ini TIDAK ADA,
     //    berarti deployment /exec Anda masih menjalankan kode LAMA (server
     //    belum di-deploy ulang sebagai versi baru).
     // Silakan cek juga di sheet "Sheet1" & "Log Perubahan" setelah menekan
-    // tombol ini - seharusnya TIDAK ADA baris baru yang tercatat, karena ini
-    // GET lookup, bukan doPost.
+    // tombol ini - seharusnya TIDAK ADA baris baru yang tercatat, karena
+    // mode 'view' hanya memanggil handleLookupRequest_() yang read-only.
     document.getElementById('btnDiag').addEventListener('click', function () {
       const diagEl = document.getElementById('diagResult');
       diagEl.textContent = 'Menghubungi server...';
-      fetch(buildLookupUrl_('TESTKONEKSI-9999'), { method: 'GET' })
-        .then(function (r) { return r.json(); })
+      callServer_({ data: 'TESTKONEKSI-9999', secret: SECRET_KEY, mode: 'view' })
         .then(function (res) {
           const lines = [];
-          lines.push('Status HTTP: OK, response diterima.');
+          lines.push('Status: response diterima dari server.');
           lines.push('codeVersion dari server: ' + (res.codeVersion || '(TIDAK ADA - deployment masih kode LAMA! Buat "New version" di Manage deployments)'));
           lines.push('mode dari server: ' + (res.mode || '-'));
           lines.push('found: ' + res.found + ' (harusnya false untuk kode uji ini - itu normal)');

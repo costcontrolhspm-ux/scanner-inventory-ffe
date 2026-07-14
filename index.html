@@ -217,6 +217,13 @@
   <div id="history"></div>
   <div class="hint">Mode "Input Data" mencatat hasil scan ke Google Sheet inventory dan bisa langsung diedit. Mode "Lihat Data" hanya menampilkan Kartu Aset, TIDAK mencatat apa pun.</div>
 
+  <div style="max-width:420px;margin:18px auto 0;">
+    <button type="button" id="btnDiag" style="width:100%;padding:10px;border:none;border-radius:8px;background:#334155;color:#cbd5e1;font-size:12.5px;cursor:pointer;">
+      🔧 Tes Koneksi &amp; Cek Versi Server
+    </button>
+    <div id="diagResult" style="font-size:11.5px;color:#93a5bb;margin-top:8px;text-align:left;white-space:pre-wrap;"></div>
+  </div>
+
   <script>
     // ==========================================================
     // WAJIB DIISI sebelum di-deploy:
@@ -409,6 +416,18 @@
     });
 
     // ===================== SCAN HANDLER =====================
+    // PENTING: mode "view" sekarang pakai GET ke endpoint lookup terpisah
+    // (?action=lookup), BUKAN POST dengan field mode seperti sebelumnya.
+    // Ini supaya jalur "hanya lihat" 100% terpisah dari jalur input/tulis -
+    // tidak mungkin ketiban logika tulis dari fungsi lain di server, dan
+    // bisa dites langsung dengan paste URL GET di browser.
+    function buildLookupUrl_(code) {
+      const sep = WEBAPP_URL.indexOf('?') === -1 ? '?' : '&';
+      return WEBAPP_URL + sep + 'action=lookup'
+        + '&data=' + encodeURIComponent(code)
+        + '&secret=' + encodeURIComponent(SECRET_KEY);
+    }
+
     function onScanSuccess(decodedText) {
       if (busy) return;
       busy = true;
@@ -416,14 +435,29 @@
       resetPanels();
       resultEl.innerHTML = 'Memproses kode: ' + decodedText + ' ...';
 
-      fetch(WEBAPP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
-        body: JSON.stringify({ data: decodedText, secret: SECRET_KEY, mode: modeAtScan })
-      })
+      const isView = modeAtScan === 'view';
+
+      const request = isView
+        ? fetch(buildLookupUrl_(decodedText), { method: 'GET' })
+        : fetch(WEBAPP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
+            body: JSON.stringify({ data: decodedText, secret: SECRET_KEY, mode: 'input' })
+          });
+
+      request
         .then(function (r) { return r.json(); })
         .then(function (res) {
-          const isView = modeAtScan === 'view';
+          // Diagnostik: kalau field codeVersion tidak ada sama sekali di
+          // response, berarti deployment Web App yang aktif MASIH VERSI LAMA
+          // (Apps Script tidak auto-update /exec - wajib buat deployment
+          // version baru lewat Deploy > Manage deployments > Edit > New
+          // version). Ditulis ke console supaya kelihatan saat debug.
+          if (!res.codeVersion) {
+            console.warn('[Scanner] Response TANPA codeVersion - deployment /exec kemungkinan masih kode LAMA. Buat "New version" di Manage deployments.');
+          } else {
+            console.log('[Scanner] Server codeVersion:', res.codeVersion, '| mode:', res.mode);
+          }
 
           if (res.status !== 'success') {
             resultEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal') + '</span>';
@@ -481,6 +515,36 @@
         resultEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';
       });
     }
+    // ===================== DIAGNOSTIK =====================
+    // Tombol ini memanggil endpoint lookup (GET, read-only) dengan kode uji
+    // "TESTKONEKSI-9999" (hampir pasti tidak ada di data Anda -> found:false,
+    // itu NORMAL & diharapkan). Tujuannya BUKAN mencari data, tapi:
+    // 1. Memastikan koneksi ke Web App berhasil (bukan error jaringan/CORS).
+    // 2. Melihat field "codeVersion" di response - kalau field ini TIDAK ADA,
+    //    berarti deployment /exec Anda masih menjalankan kode LAMA (server
+    //    belum di-deploy ulang sebagai versi baru).
+    // Silakan cek juga di sheet "Sheet1" & "Log Perubahan" setelah menekan
+    // tombol ini - seharusnya TIDAK ADA baris baru yang tercatat, karena ini
+    // GET lookup, bukan doPost.
+    document.getElementById('btnDiag').addEventListener('click', function () {
+      const diagEl = document.getElementById('diagResult');
+      diagEl.textContent = 'Menghubungi server...';
+      fetch(buildLookupUrl_('TESTKONEKSI-9999'), { method: 'GET' })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          const lines = [];
+          lines.push('Status HTTP: OK, response diterima.');
+          lines.push('codeVersion dari server: ' + (res.codeVersion || '(TIDAK ADA - deployment masih kode LAMA! Buat "New version" di Manage deployments)'));
+          lines.push('mode dari server: ' + (res.mode || '-'));
+          lines.push('found: ' + res.found + ' (harusnya false untuk kode uji ini - itu normal)');
+          lines.push('');
+          lines.push('Cek juga sheet "Sheet1" & "Log Perubahan" - seharusnya TIDAK ada baris baru dari tes ini.');
+          diagEl.textContent = lines.join('\n');
+        })
+        .catch(function (err) {
+          diagEl.textContent = '❌ Gagal menghubungi server: ' + err + '\nCek WEBAPP_URL, koneksi internet, atau status deployment Web App.';
+        });
+    });
   </script>
 </body>
 </html>

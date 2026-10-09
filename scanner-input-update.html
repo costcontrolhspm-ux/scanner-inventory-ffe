@@ -194,8 +194,16 @@
       selectEl.value = current && list.indexOf(current) !== -1 ? current : list[0];
     }
 
+    let formDirty = false; // true kalau petugas sudah mengubah isi form
+    ['fDepartment','fLocation','fCondition','fStatus'].forEach(function (id) {
+      const el = document.getElementById(id);
+      el.addEventListener('input', function () { formDirty = true; });
+      el.addEventListener('change', function () { formDirty = true; });
+    });
+
     function showEditForm(item, unit) {
       currentItem = item;
+      formDirty = false;
       document.getElementById('fCode').innerText = item.number;
       document.getElementById('fUnit').innerHTML = unit ? '<span class="unit-badge">Unit ke-' + unit + '</span>' : '';
       document.getElementById('fItem').innerText = item.item;
@@ -206,19 +214,96 @@
       editForm.style.display = 'block';
     }
 
-    // Langkah 1: setiap kode yang discan langsung dicatat sebagai INPUT
-    // (mode default doPost = 'input') -> masuk ke Sheet1 + Log Perubahan.
+    // ----- Indeks asset di HP: scan jadi INSTAN -----
+    // Daftar ringkas semua asset dimuat sekali saat halaman dibuka (dan
+    // disegarkan tiap 3 menit). Saat scan, kode dicocokkan LANGSUNG di HP
+    // tanpa menunggu server; form edit muncul seketika. Pencatatan log tetap
+    // berjalan di belakang layar. Kalau indeks belum siap atau kode tidak ada
+    // di indeks (mis. asset baru), otomatis memakai lookup ke server.
+    let ASSET_INDEX = null; // Map: kode (huruf kecil) -> item
+
+    function loadAssetIndex() {
+      if (document.hidden) return;
+      fetch(WEBAPP_URL + '?action=index&secret=' + encodeURIComponent(SECRET_KEY), { method: 'GET' })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.status !== 'success' || !res.items) return;
+          const m = new Map();
+          res.items.forEach(function (it) {
+            const k = String(it.number || '').trim().toLowerCase();
+            if (k && !m.has(k)) m.set(k, it);
+          });
+          ASSET_INDEX = m;
+          if (res.conditionOptions && res.conditionOptions.length) CONDITION_OPTIONS = res.conditionOptions;
+          if (!busy && !currentItem) {
+            resultEl.innerText = 'Siap scan (' + m.size + ' asset dimuat). Arahkan kamera ke barcode/QR...';
+          }
+        })
+        .catch(function () { /* diam: scan tetap jalan lewat lookup server */ });
+    }
+
+    function localLookup(code) {
+      if (!ASSET_INDEX) return null;
+      code = String(code || '').trim();
+      let it = ASSET_INDEX.get(code.toLowerCase());
+      if (it) return { item: it, unit: '' };
+      const m = code.match(/^(.+)-(\d{1,3})$/);
+      if (m) {
+        it = ASSET_INDEX.get(m[1].toLowerCase());
+        if (it) return { item: it, unit: m[2] };
+      }
+      return null;
+    }
+
+    function renderFound(item, unit, logPromise) {
+      const shownCode = unit ? (item.number + '-' + unit) : item.number;
+      resultEl.innerHTML =
+        '<span class="ok">✅ ' + shownCode + ' - ' + item.item + '</span><br>' +
+        item.department + ' • ' + item.location +
+        '<br><span id="logState" class="warn">⏳ Mencatat ke log...</span>';
+      // Tampilkan form supaya petugas bisa langsung update kalau ada perubahan
+      showEditForm(item, unit);
+      trackLog(logPromise, shownCode, false);
+    }
+
+    function renderNotFound(decodedText, logPromise) {
+      resultEl.innerHTML =
+        '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span><br>' +
+        '<span id="logState" class="warn">⏳ Mencatat ke log...</span>';
+      trackLog(logPromise, decodedText, true);
+      busy = false;
+    }
+
+    // Langkah 1: setiap kode yang discan dicatat sebagai INPUT (POST -> Sheet1 +
+    // Log Perubahan) di belakang layar, sementara data asset ditampilkan secepat
+    // mungkin: dari indeks di HP kalau ada, kalau tidak lewat lookup server.
     function onScanSuccess(decodedText) {
       if (busy) return;
       busy = true;
       editForm.style.display = 'none';
-      resultEl.innerHTML = 'Memproses kode: ' + decodedText + ' ...';
 
-      fetch(WEBAPP_URL, {
+      // (a) Pencatatan log - jalan di belakang layar
+      const logPromise = fetch(WEBAPP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight CORS
         body: JSON.stringify({ data: decodedText, secret: SECRET_KEY })
-      })
+      }).then(function (r) { return r.json(); });
+
+      // (b) Cocokkan langsung di HP -> tampil INSTAN
+      const local = localLookup(decodedText);
+      if (local) {
+        renderFound(local.item, local.unit, logPromise);
+        return;
+      }
+
+      // (c) Tidak ada di indeks / indeks belum siap -> lookup ke server
+      resultEl.innerHTML = 'Memproses kode: ' + decodedText + ' ...';
+      const lookupUrl = WEBAPP_URL
+        + '?action=lookup'
+        + '&data=' + encodeURIComponent(decodedText)
+        + '&secret=' + encodeURIComponent(SECRET_KEY);
+
+      fetch(lookupUrl, { method: 'GET' })
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (res.status !== 'success') {
@@ -227,25 +312,11 @@
             busy = false;
             return;
           }
-          // Pakai daftar Condition dari dropdown sheet kalau dikirim server
           if (res.conditionOptions && res.conditionOptions.length) {
             CONDITION_OPTIONS = res.conditionOptions;
           }
-          if (res.found) {
-            const unit = res.unit ? String(res.unit) : '';
-            const shownCode = unit ? (res.item.number + '-' + unit) : res.item.number;
-            resultEl.innerHTML =
-              '<span class="ok">✅ Dicatat: ' + shownCode + ' - ' + res.item.item + '</span><br>' +
-              res.item.department + ' • ' + res.item.location;
-            addHistory('✅ ' + res.timestamp + ' — ' + shownCode + ' (input)', 'ok');
-            // Tampilkan form supaya petugas bisa langsung update kalau ada perubahan
-            showEditForm(res.item, unit);
-          } else {
-            resultEl.innerHTML =
-              '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span><br>Tetap dicatat di log scan.';
-            addHistory('⚠️ ' + res.timestamp + ' — kode "' + decodedText + '" tidak dikenal', 'warn');
-            busy = false;
-          }
+          if (res.found) renderFound(res.item, res.unit ? String(res.unit) : '', logPromise);
+          else renderNotFound(decodedText, logPromise);
         })
         .catch(function (err) {
           resultEl.innerHTML = '<span class="err">❌ Gagal menghubungi server: ' + err + '</span>';
@@ -254,28 +325,68 @@
         });
     }
 
+    // Menunggu hasil pencatatan log (POST) dan memperbarui status di layar.
+    function trackLog(logPromise, shownCode, notFound) {
+      logPromise
+        .then(function (res) {
+          const stateEl = document.getElementById('logState');
+          if (res.status !== 'success') {
+            if (stateEl) { stateEl.className = 'err'; stateEl.innerText = '❌ Gagal mencatat log: ' + (res.message || ''); }
+            addHistory('❌ Gagal mencatat ' + shownCode + ': ' + (res.message || ''), 'err');
+            return;
+          }
+          if (stateEl) { stateEl.className = 'ok'; stateEl.innerText = '📝 Tercatat di log.'; }
+          // Data dari server = paling baru. Kalau petugas belum mengubah isi form,
+          // segarkan form dengan data terbaru (jaga-jaga indeks di HP agak usang).
+          if (res.found && res.item && currentItem && currentItem.number === res.item.number && !formDirty) {
+            showEditForm(res.item, res.unit ? String(res.unit) : '');
+          }
+          addHistory(notFound
+            ? ('⚠️ ' + res.timestamp + ' — kode "' + shownCode + '" tidak dikenal (tetap dicatat)')
+            : ('✅ ' + res.timestamp + ' — ' + shownCode + ' (input)'),
+            notFound ? 'warn' : 'ok');
+        })
+        .catch(function (err) {
+          const stateEl = document.getElementById('logState');
+          if (stateEl) { stateEl.className = 'err'; stateEl.innerText = '❌ Gagal mencatat log (koneksi).'; }
+          addHistory('❌ Gagal mencatat ' + shownCode + ' (koneksi)', 'err');
+        });
+    }
+
     // Langkah 2 (opsional): kirim mode='update' HANYA kalau petugas mengubah
     // salah satu field di form dan menekan tombol Simpan Perubahan.
     document.getElementById('btnSave').addEventListener('click', function () {
       if (!currentItem) return;
-      const updates = {
+      const all = {
         department: document.getElementById('fDepartment').value.trim(),
         location: document.getElementById('fLocation').value.trim(),
         condition: document.getElementById('fCondition').value.trim(),
         status: document.getElementById('fStatus').value.trim()
       };
+      // Kirim HANYA field yang benar-benar berubah (payload lebih kecil, server
+      // lebih sedikit kerja). Kalau tidak ada yang berubah, tidak perlu ke server.
+      const updates = {};
+      let changed = 0;
+      Object.keys(all).forEach(function (k) {
+        if (all[k] && all[k] !== String(currentItem[k] || '').trim()) { updates[k] = all[k]; changed++; }
+      });
+      if (!changed) {
+        resultEl.innerHTML = '<span class="warn">⚠️ Tidak ada perubahan untuk disimpan.</span>';
+        return;
+      }
 
+      const saved = currentItem;
       document.getElementById('btnSave').disabled = true;
-      resultEl.innerHTML = 'Menyimpan perubahan...';
+      resultEl.innerHTML = '⏳ Menyimpan perubahan...';
 
       fetch(WEBAPP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
-          data: currentItem.number, // kode dasar asset (nomor urut unit tidak ikut diedit)
+          data: saved.number, // kode dasar asset (nomor urut unit tidak ikut diedit)
           secret: SECRET_KEY,
           mode: 'update',
-          category: currentItem.category,
+          category: saved.category,
           updates: updates
         })
       })
@@ -290,7 +401,10 @@
           }
           resultEl.innerHTML = '<span class="ok">✅ Perubahan data ' + res.item.number + ' tersimpan.</span>';
           addHistory('💾 ' + res.timestamp + ' — ' + res.item.number + ' (update)', 'ok');
-          setTimeout(resetForNextScan, 1600);
+          // Langsung siap scan berikutnya (tanpa jeda); pesan sukses tetap terlihat
+          busy = false;
+          currentItem = null;
+          editForm.style.display = 'none';
         })
         .catch(function (err) {
           document.getElementById('btnSave').disabled = false;
@@ -302,15 +416,31 @@
       resetForNextScan();
     });
 
+
+    // Pemanasan server: Apps Script yang lama tidak dipakai butuh 1-3 detik
+    // untuk "bangun" di scan pertama. Kirim lookup ringan (read-only) saat
+    // halaman dibuka & setiap 4 menit selama halaman terbuka, supaya scan
+    // berikutnya langsung cepat.
+    function warmUpServer() {
+      if (document.hidden) return;
+      fetch(WEBAPP_URL + '?action=lookup&data=__warmup__&secret=' + encodeURIComponent(SECRET_KEY), { method: 'GET' })
+        .catch(function () {});
+    }
+    warmUpServer();
+    setInterval(warmUpServer, 4 * 60 * 1000);
+    loadAssetIndex();
+    setInterval(loadAssetIndex, 3 * 60 * 1000);
+
     if (WEBAPP_URL.indexOf('GANTI_DENGAN') !== -1 || SECRET_KEY.indexOf('GANTI_DENGAN') !== -1) {
       resultEl.innerHTML = '<span class="err">Halaman belum dikonfigurasi. Isi WEBAPP_URL & SECRET_KEY di source code dulu.</span>';
     } else if (typeof Html5Qrcode === 'undefined') {
       resultEl.innerHTML = '<span class="err">Gagal memuat library scanner. Periksa koneksi internet lalu muat ulang halaman.</span>';
     } else {
-      const html5QrCode = new Html5Qrcode("reader");
+      // Pakai detektor bawaan browser (jauh lebih cepat) kalau tersedia
+      const html5QrCode = new Html5Qrcode("reader", { experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
       html5QrCode.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        { fps: 15, qrbox: { width: 250, height: 250 } },
         onScanSuccess
       ).catch(function (err) {
         resultEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';

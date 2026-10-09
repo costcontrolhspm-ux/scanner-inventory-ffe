@@ -85,7 +85,7 @@
       margin-bottom: 10px;
       padding-right: 22px;
     }
-    #cardNumber { font-size: 19px; font-weight: 700; letter-spacing: 0.5px; }
+    #cardNumber { font-size: 19px; font-weight: 700; letter-spacing: 0.5px; word-break: break-all; }
     #cardCategory {
       background: #1d4ed8;
       padding: 3px 10px;
@@ -95,9 +95,37 @@
       white-space: nowrap;
     }
     #cardItem { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
-    .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13.5px; border-bottom: 1px dashed #22415f; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 0; font-size: 13.5px; border-bottom: 1px dashed #22415f; }
     .row span:first-child { color: #93a5bb; }
     .row span:last-child { font-weight: 600; text-align: right; }
+
+    /* Badge Condition - warna mengikuti chip dropdown di Google Sheet (kolom H) */
+    .cond-badge {
+      display: inline-block;
+      padding: 3px 11px;
+      border-radius: 14px;
+      font-size: 12.5px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+    .cond-good       { background: #1f8f4e; color: #fff; }
+    .cond-repair     { background: #c81e1e; color: #fff; }
+    .cond-obsolete   { background: #bfe3fb; color: #0f2740; }
+    .cond-missing    { background: #4b4f56; color: #fff; }
+    .cond-unrecorded { background: #1d5fd1; color: #fff; }
+    .cond-other      { background: #2a4a6b; color: #fff; }
+
+    /* Badge unit (nomor urut di belakang kode label) */
+    .unit-badge {
+      display: inline-block;
+      background: #fbbf24;
+      color: #3b2a00;
+      padding: 3px 11px;
+      border-radius: 14px;
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+
     #cardFoto { width: 100%; border-radius: 10px; margin-top: 12px; max-height: 200px; object-fit: cover; }
     #cardScanAgainBtn {
       width: 100%;
@@ -130,6 +158,7 @@
         <div id="cardCategory">-</div>
       </div>
       <div id="cardItem">-</div>
+      <div class="row" id="rowUnit" style="display:none;"><span>Unit / No. Urut</span><span id="cardUnit">-</span></div>
       <div class="row"><span>Department / PIC</span><span id="cardDept">-</span></div>
       <div class="row"><span>Lokasi</span><span id="cardLoc">-</span></div>
       <div class="row"><span>Status</span><span id="cardStatus">-</span></div>
@@ -188,14 +217,63 @@
       return d.getDate() + ' ' + bulan[d.getMonth()] + ' ' + d.getFullYear();
     }
 
-    function fillCard(item) {
-      document.getElementById('cardNumber').innerText = item.number || '-';
+    // Kelas warna badge Condition. Dicocokkan lewat kata kunci dari 5 pilihan
+    // resmi di dropdown kolom H sheet:
+    //   Baik (Good) | Rusak Ringan (Need Repair) | Rusak Berat (Demager/Obsolate)
+    //   Tidak Ditemukan (Missing) | Aset Tanpa Catatan (Unrecorded)
+    function conditionClass(cond) {
+      const s = String(cond || '').toLowerCase();
+      if (s.indexOf('good') !== -1 || s.indexOf('baik') === 0) return 'cond-good';
+      if (s.indexOf('ringan') !== -1 || s.indexOf('need repair') !== -1) return 'cond-repair';
+      if (s.indexOf('berat') !== -1 || s.indexOf('demager') !== -1 || s.indexOf('obsolate') !== -1) return 'cond-obsolete';
+      if (s.indexOf('missing') !== -1 || s.indexOf('tidak ditemukan') !== -1) return 'cond-missing';
+      if (s.indexOf('unrecorded') !== -1 || s.indexOf('tanpa catatan') !== -1) return 'cond-unrecorded';
+      return 'cond-other';
+    }
+
+    // Nomor urut unit dari kode yang discan. Contoh: scan "FFE1-001-2" untuk
+    // asset "FFE1-001" -> "2". Dipakai server (res.unit) kalau ada; kalau
+    // server belum di-update, dihitung sendiri dari selisih kode & nomor asset.
+    function getUnit(scannedCode, item, serverUnit) {
+      if (serverUnit) return String(serverUnit);
+      const code = String(scannedCode || '').trim();
+      const base = String((item && item.number) || '').trim();
+      if (!code || !base || code.toLowerCase() === base.toLowerCase()) return '';
+      const prefix = base.toLowerCase() + '-';
+      if (code.toLowerCase().indexOf(prefix) !== 0) return '';
+      const rest = code.substring(prefix.length);
+      return /^\d{1,3}$/.test(rest) ? rest : '';
+    }
+
+    function fillCard(item, scannedCode, serverUnit) {
+      const unit = getUnit(scannedCode, item, serverUnit);
+
+      // Kode di kepala kartu: kalau label punya nomor urut, tampilkan kode lengkap
+      document.getElementById('cardNumber').innerText = unit ? (item.number + '-' + unit) : (item.number || '-');
       document.getElementById('cardCategory').innerText = item.category || '-';
       document.getElementById('cardItem').innerText = item.item || '-';
       document.getElementById('cardDept').innerText = item.department || '-';
       document.getElementById('cardLoc').innerText = item.location || '-';
       document.getElementById('cardStatus').innerText = item.status || '-';
-      document.getElementById('cardCondition').innerText = item.condition || '-';
+
+      // Condition tampil sebagai badge berwarna
+      const condEl = document.getElementById('cardCondition');
+      condEl.innerHTML = '';
+      const badge = document.createElement('span');
+      badge.className = 'cond-badge ' + conditionClass(item.condition);
+      badge.textContent = item.condition || '-';
+      condEl.appendChild(badge);
+
+      // Baris unit hanya muncul kalau kode yang discan punya nomor urut
+      const rowUnit = document.getElementById('rowUnit');
+      if (unit) {
+        const qtyText = item.qty != null && item.qty !== '' ? (' dari ' + item.qty) : '';
+        document.getElementById('cardUnit').innerHTML = '<span class="unit-badge">Unit ke-' + unit + qtyText + '</span>';
+        rowUnit.style.display = 'flex';
+      } else {
+        rowUnit.style.display = 'none';
+      }
+
       document.getElementById('cardQty').innerText = item.qty != null ? item.qty : '-';
       document.getElementById('cardPurchaseDate').innerText = formatTanggalID(item.purchaseDate);
       document.getElementById('cardPurchaseValue').innerText = formatRupiah(item.purchaseValue);
@@ -245,7 +323,7 @@
             busy = false;
           } else if (res.found) {
             statusEl.innerHTML = '<span class="ok">✅ Data ditemukan</span>';
-            fillCard(res.item); // popup muncul, busy tetap true sampai ditutup manual
+            fillCard(res.item, decodedText, res.unit); // popup muncul, busy tetap true sampai ditutup manual
           } else {
             statusEl.innerHTML = '<span class="warn">⚠️ Kode "' + decodedText + '" tidak ditemukan di data.</span>';
             setTimeout(function () {

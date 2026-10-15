@@ -65,16 +65,13 @@
       color: #fff;
       font-size: 14px;
     }
-    .unit-badge {
-      display: inline-block;
-      background: #fbbf24;
-      color: #3b2a00;
-      padding: 2px 10px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 700;
-      margin-left: 6px;
-    }
+    #photoBox { margin-top: 4px; }
+    #fPhotoPreview { display: none; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; border: 1px solid #2a4a6b; }
+    #fPhotoEmpty { font-size: 12.5px; color: #93a5bb; padding: 10px; border: 1px dashed #2a4a6b; border-radius: 10px; text-align: center; }
+    .btnRow.photo { margin-top: 8px; }
+    .btnRow.photo button { background: #2a4a6b; color: #fff; }
+    .btnRow.photo #btnUploadPhoto { background: #0f766e; }
+    .btnRow.photo button:disabled { opacity: 0.45; cursor: not-allowed; }
     .btnRow { display: flex; gap: 8px; margin-top: 16px; }
     .btnRow button {
       flex: 1;
@@ -108,7 +105,7 @@
   <!-- Form ini HANYA muncul setelah scan berhasil & data asset ditemukan -->
   <div id="editForm">
     <div style="font-size:13px;color:#93a5bb;">
-      Kode: <b id="fCode" style="color:#fff;"></b><span id="fUnit"></span> — <span id="fItem"></span>
+      Kode: <b id="fCode" style="color:#fff;"></b> — <span id="fItem"></span>
     </div>
     <label>Department / PIC</label>
     <input id="fDepartment" type="text" placeholder="Department / pemegang asset">
@@ -118,6 +115,16 @@
     <select id="fCondition"></select>
     <label>Status</label>
     <select id="fStatus"></select>
+    <label>Foto Asset</label>
+    <div id="photoBox">
+      <img id="fPhotoPreview" alt="Foto asset">
+      <div id="fPhotoEmpty">Belum ada foto</div>
+      <div class="btnRow photo">
+        <button type="button" id="btnPickPhoto">📷 Ambil / Pilih Foto</button>
+        <button type="button" id="btnUploadPhoto" disabled>📤 Upload Foto</button>
+      </div>
+      <input type="file" id="fPhotoInput" accept="image/*" style="display:none">
+    </div>
     <div class="btnRow">
       <button id="btnSkip">Lewati</button>
       <button id="btnSave">💾 Simpan Perubahan</button>
@@ -174,6 +181,8 @@
     function resetForNextScan() {
       busy = false;
       currentItem = null;
+      pendingPhoto = null;
+      if (typeof startScanner === 'function') startScanner(); // nyalakan lagi kalau tadi dihentikan untuk foto
       editForm.style.display = 'none';
       resultEl.innerText = 'Arahkan kamera ke barcode/QR kode asset berikutnya...';
     }
@@ -201,11 +210,11 @@
       el.addEventListener('change', function () { formDirty = true; });
     });
 
-    function showEditForm(item, unit) {
+    function showEditForm(item) {
       currentItem = item;
       formDirty = false;
+      resetPhotoBox(item.foto || '');
       document.getElementById('fCode').innerText = item.number;
-      document.getElementById('fUnit').innerHTML = unit ? '<span class="unit-badge">Unit ke-' + unit + '</span>' : '';
       document.getElementById('fItem').innerText = item.item;
       document.getElementById('fDepartment').value = item.department || '';
       document.getElementById('fLocation').value = item.location || '';
@@ -244,26 +253,18 @@
 
     function localLookup(code) {
       if (!ASSET_INDEX) return null;
-      code = String(code || '').trim();
-      let it = ASSET_INDEX.get(code.toLowerCase());
-      if (it) return { item: it, unit: '' };
-      const m = code.match(/^(.+)-(\d{1,3})$/);
-      if (m) {
-        it = ASSET_INDEX.get(m[1].toLowerCase());
-        if (it) return { item: it, unit: m[2] };
-      }
-      return null;
+      const it = ASSET_INDEX.get(String(code || '').trim().toLowerCase());
+      return it ? { item: it } : null;
     }
 
-    function renderFound(item, unit, logPromise) {
-      const shownCode = unit ? (item.number + '-' + unit) : item.number;
+    function renderFound(item, logPromise) {
       resultEl.innerHTML =
-        '<span class="ok">✅ ' + shownCode + ' - ' + item.item + '</span><br>' +
+        '<span class="ok">✅ ' + item.number + ' - ' + item.item + '</span><br>' +
         item.department + ' • ' + item.location +
         '<br><span id="logState" class="warn">⏳ Mencatat ke log...</span>';
       // Tampilkan form supaya petugas bisa langsung update kalau ada perubahan
-      showEditForm(item, unit);
-      trackLog(logPromise, shownCode, false);
+      showEditForm(item);
+      trackLog(logPromise, item.number, false);
     }
 
     function renderNotFound(decodedText, logPromise) {
@@ -292,7 +293,7 @@
       // (b) Cocokkan langsung di HP -> tampil INSTAN
       const local = localLookup(decodedText);
       if (local) {
-        renderFound(local.item, local.unit, logPromise);
+        renderFound(local.item, logPromise);
         return;
       }
 
@@ -315,7 +316,7 @@
           if (res.conditionOptions && res.conditionOptions.length) {
             CONDITION_OPTIONS = res.conditionOptions;
           }
-          if (res.found) renderFound(res.item, res.unit ? String(res.unit) : '', logPromise);
+          if (res.found) renderFound(res.item, logPromise);
           else renderNotFound(decodedText, logPromise);
         })
         .catch(function (err) {
@@ -339,7 +340,7 @@
           // Data dari server = paling baru. Kalau petugas belum mengubah isi form,
           // segarkan form dengan data terbaru (jaga-jaga indeks di HP agak usang).
           if (res.found && res.item && currentItem && currentItem.number === res.item.number && !formDirty) {
-            showEditForm(res.item, res.unit ? String(res.unit) : '');
+            showEditForm(res.item);
           }
           addHistory(notFound
             ? ('⚠️ ' + res.timestamp + ' — kode "' + shownCode + '" tidak dikenal (tetap dicatat)')
@@ -383,7 +384,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
-          data: saved.number, // kode dasar asset (nomor urut unit tidak ikut diedit)
+          data: saved.number,
           secret: SECRET_KEY,
           mode: 'update',
           category: saved.category,
@@ -404,7 +405,9 @@
           // Langsung siap scan berikutnya (tanpa jeda); pesan sukses tetap terlihat
           busy = false;
           currentItem = null;
+          pendingPhoto = null;
           editForm.style.display = 'none';
+          startScanner();
         })
         .catch(function (err) {
           document.getElementById('btnSave').disabled = false;
@@ -431,20 +434,160 @@
     loadAssetIndex();
     setInterval(loadAssetIndex, 3 * 60 * 1000);
 
+
+    // ----- Kamera scanner: bisa dihentikan sementara saat mengambil foto -----
+    // (di sebagian HP, kamera untuk foto tidak bisa dibuka selagi kamera scanner aktif)
+    let html5QrCode = null;
+    let scannerOn = false;
+
+    function startScanner() {
+      if (scannerOn || typeof Html5Qrcode === 'undefined') return Promise.resolve();
+      if (!html5QrCode) {
+        // Pakai detektor bawaan browser (jauh lebih cepat) kalau tersedia
+        html5QrCode = new Html5Qrcode("reader", { experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
+      }
+      return html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 15, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      ).then(function () { scannerOn = true; })
+       .catch(function (err) {
+        resultEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';
+      });
+    }
+
+    function stopScanner() {
+      if (!scannerOn || !html5QrCode) return Promise.resolve();
+      return html5QrCode.stop().then(function () { scannerOn = false; }).catch(function () { scannerOn = false; });
+    }
+
+    // ----- Foto asset -----
+    let pendingPhoto = null; // { base64, mimeType, fileName } -> menunggu di-upload
+    const photoInput = document.getElementById('fPhotoInput');
+    const photoPreview = document.getElementById('fPhotoPreview');
+    const photoEmpty = document.getElementById('fPhotoEmpty');
+    const btnPick = document.getElementById('btnPickPhoto');
+    const btnUploadPhoto = document.getElementById('btnUploadPhoto');
+
+    function showPhoto(src) {
+      if (src) {
+        photoPreview.src = src;
+        photoPreview.style.display = 'block';
+        photoEmpty.style.display = 'none';
+      } else {
+        photoPreview.removeAttribute('src');
+        photoPreview.style.display = 'none';
+        photoEmpty.style.display = 'block';
+      }
+    }
+
+    function resetPhotoBox(existingUrl) {
+      pendingPhoto = null;
+      photoInput.value = '';
+      btnUploadPhoto.disabled = true;
+      btnUploadPhoto.innerText = '📤 Upload Foto';
+      btnPick.innerText = existingUrl ? '📷 Ganti Foto' : '📷 Ambil / Pilih Foto';
+      showPhoto(existingUrl);
+    }
+
+    // Perkecil foto di HP (maks 1280px, JPEG 80%) supaya upload cepat & hemat kuota.
+    function resizeImage(file, maxSide, quality) {
+      return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onerror = function () { reject(new Error('Gagal membaca file foto.')); };
+        reader.onload = function () {
+          const img = new Image();
+          img.onerror = function () { reject(new Error('File bukan gambar yang valid.')); };
+          img.onload = function () {
+            let w = img.width, h = img.height;
+            const scale = Math.min(1, maxSide / Math.max(w, h));
+            w = Math.round(w * scale); h = Math.round(h * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    btnPick.addEventListener('click', function () {
+      // Hentikan kamera scanner dulu, baru buka kamera/galeri untuk foto
+      stopScanner().then(function () { photoInput.click(); });
+    });
+
+    photoInput.addEventListener('change', function () {
+      const file = photoInput.files && photoInput.files[0];
+      if (!file || !currentItem) return;
+      btnUploadPhoto.disabled = true;
+      resultEl.innerHTML = '⏳ Memproses foto...';
+      resizeImage(file, 1280, 0.8)
+        .then(function (dataUrl) {
+          pendingPhoto = {
+            base64: dataUrl.split(',')[1],
+            mimeType: 'image/jpeg',
+            fileName: currentItem.number + '.jpg'
+          };
+          showPhoto(dataUrl);
+          formDirty = true; // jangan sampai form disegarkan otomatis & menghapus foto yang baru dipilih
+          btnUploadPhoto.disabled = false;
+          resultEl.innerHTML = '<span class="ok">📷 Foto siap. Tekan "Upload Foto" untuk menyimpan.</span>';
+        })
+        .catch(function (err) {
+          resultEl.innerHTML = '<span class="err">❌ ' + (err && err.message ? err.message : err) + '</span>';
+        });
+    });
+
+    btnUploadPhoto.addEventListener('click', function () {
+      if (!currentItem || !pendingPhoto) return;
+      const saved = currentItem;
+      const photo = pendingPhoto;
+      btnUploadPhoto.disabled = true;
+      btnUploadPhoto.innerText = '⏳ Mengupload...';
+      resultEl.innerHTML = '⏳ Mengupload foto ' + saved.number + '...';
+
+      fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          data: saved.number,
+          secret: SECRET_KEY,
+          mode: 'photo',
+          category: saved.category,
+          photo: photo
+        })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.status !== 'success') {
+            btnUploadPhoto.disabled = false;
+            btnUploadPhoto.innerText = '📤 Upload Foto';
+            resultEl.innerHTML = '<span class="err">❌ ' + (res.message || 'Gagal upload foto') + '</span>';
+            addHistory('❌ Gagal upload foto ' + saved.number + ': ' + (res.message || ''), 'err');
+            return;
+          }
+          saved.foto = res.foto; // simpan di data lokal (juga di indeks) supaya form berikutnya sudah membawa foto
+          pendingPhoto = null;
+          btnUploadPhoto.innerText = '✅ Foto tersimpan';
+          btnPick.innerText = '📷 Ganti Foto';
+          resultEl.innerHTML = '<span class="ok">✅ Foto ' + saved.number + ' tersimpan.</span>';
+          addHistory('📷 ' + res.timestamp + ' — ' + saved.number + ' (foto)', 'ok');
+        })
+        .catch(function (err) {
+          btnUploadPhoto.disabled = false;
+          btnUploadPhoto.innerText = '📤 Upload Foto';
+          resultEl.innerHTML = '<span class="err">❌ Gagal upload foto: ' + err + '</span>';
+        });
+    });
+
     if (WEBAPP_URL.indexOf('GANTI_DENGAN') !== -1 || SECRET_KEY.indexOf('GANTI_DENGAN') !== -1) {
       resultEl.innerHTML = '<span class="err">Halaman belum dikonfigurasi. Isi WEBAPP_URL & SECRET_KEY di source code dulu.</span>';
     } else if (typeof Html5Qrcode === 'undefined') {
       resultEl.innerHTML = '<span class="err">Gagal memuat library scanner. Periksa koneksi internet lalu muat ulang halaman.</span>';
     } else {
-      // Pakai detektor bawaan browser (jauh lebih cepat) kalau tersedia
-      const html5QrCode = new Html5Qrcode("reader", { experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
-      html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 15, qrbox: { width: 250, height: 250 } },
-        onScanSuccess
-      ).catch(function (err) {
-        resultEl.innerHTML = '<span class="err">Gagal mengakses kamera: ' + err + '<br>Pastikan browser diberi izin kamera dan halaman diakses lewat HTTPS.</span>';
-      });
+      startScanner();
     }
   </script>
 </body>
